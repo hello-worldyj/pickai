@@ -91,11 +91,15 @@ struct HistoryRootView: View {
                 .tint(.pickAccent)
                 .disabled(email.isEmpty || password.isEmpty || isSubmitting)
 
-            Text("Accounts can only be created at picky-ai.web.app — not here.")
-                .foregroundStyle(.secondary)
-                .font(.caption)
-                .multilineTextAlignment(.center)
-                .frame(width: 260)
+            VStack(spacing: 2) {
+                Text("Accounts can only be created at")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                Link("picky-ai.web.app", destination: URL(string: "https://picky-ai.web.app")!)
+                    .font(.caption)
+            }
+            .multilineTextAlignment(.center)
+            .frame(width: 260)
 
             if let loginError {
                 Text(loginError).foregroundStyle(.red).font(.caption)
@@ -351,8 +355,11 @@ struct HistoryDetailView: View {
                 Text("\(entry.mode.capitalized) · \(formattedDate(entry.created_at))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(entry.question ?? "(screenshot)").font(.title3.bold())
+                Text(entry.question ?? "(screenshot)")
+                    .font(.title3.bold())
+                    .textSelection(.enabled)
                 Text(entry.answer)
+                    .textSelection(.enabled)
 
                 Divider().padding(.vertical, 8)
 
