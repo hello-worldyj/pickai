@@ -22,6 +22,9 @@ final class HistoryWindowController: NSObject, NSWindowDelegate {
         newWindow.setContentSize(NSSize(width: 720, height: 560))
         newWindow.center()
         newWindow.delegate = self
+        // Excludes this window from screenshots, screen recordings, and screen shares —
+        // it's still visible on-screen. Matches OverlayPanel's behavior.
+        newWindow.sharingType = .none
         window = newWindow
 
         NSApp.activate(ignoringOtherApps: true)

@@ -5,9 +5,18 @@ enum QueryMode: String {
     case explain
 }
 
-enum BackendError: Error {
+enum BackendError: LocalizedError {
     case http(Int)
     case decoding
+
+    var errorDescription: String? {
+        switch self {
+        case .http(let statusCode):
+            return "Backend returned HTTP \(statusCode)."
+        case .decoding:
+            return "Backend response could not be decoded."
+        }
+    }
 }
 
 struct ChatMessage: Encodable {

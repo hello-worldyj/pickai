@@ -13,11 +13,9 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        // TEMPORARILY DISABLED for diagnosis: sharingType = .none (excludes from screenshots/
-        // screen shares) is suspected of not compositing correctly over a fullscreen app's
-        // Space in some cases — this is the one variable that couldn't be verified without the
-        // user's real environment. Re-enable once confirmed either way.
-        // sharingType = .none
+        // Excludes this window from screenshots, screen recordings, and screen shares
+        // (e.g. Cmd+Shift+4, QuickTime, Zoom/Meet screen share) — it's still visible on-screen.
+        sharingType = .none
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
