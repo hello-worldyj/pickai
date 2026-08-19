@@ -75,10 +75,9 @@ struct HistoryRootView: View {
     private var loginView: some View {
         VStack(spacing: 16) {
             Text("Pick AI History").font(.title2.bold())
-            Text("Sign in with your Pick AI account.\n(Create one on picky-ai.web.app if you signed up with Google there — this app only supports email/password.)")
+            Text("Sign in with your Pick AI account.")
                 .foregroundStyle(.secondary)
                 .font(.callout)
-                .multilineTextAlignment(.center)
 
             TextField("Email", text: $email)
                 .textFieldStyle(.roundedBorder)
@@ -87,14 +86,16 @@ struct HistoryRootView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
 
-            HStack {
-                Button("Sign In") { Task { await signIn() } }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.pickAccent)
-                Button("Create Account") { Task { await signUp() } }
-                    .buttonStyle(.bordered)
-            }
-            .disabled(email.isEmpty || password.isEmpty || isSubmitting)
+            Button("Sign In") { Task { await signIn() } }
+                .buttonStyle(.borderedProminent)
+                .tint(.pickAccent)
+                .disabled(email.isEmpty || password.isEmpty || isSubmitting)
+
+            Text("Accounts can only be created at picky-ai.web.app — not here.")
+                .foregroundStyle(.secondary)
+                .font(.caption)
+                .multilineTextAlignment(.center)
+                .frame(width: 260)
 
             if let loginError {
                 Text(loginError).foregroundStyle(.red).font(.caption)
@@ -115,16 +116,6 @@ struct HistoryRootView: View {
         }
     }
 
-    private func signUp() async {
-        isSubmitting = true
-        loginError = nil
-        defer { isSubmitting = false }
-        do {
-            _ = try await Auth.auth().createUser(withEmail: email, password: password)
-        } catch {
-            loginError = "Couldn't create account — check the email and try again."
-        }
-    }
 }
 
 private struct CurrentUserEmailKey: EnvironmentKey {
