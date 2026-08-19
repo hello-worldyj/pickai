@@ -178,6 +178,16 @@ h1 { font-size: 22px; margin: 0 0 16px; }
   background: var(--bg);
 }
 
+/* Shown on top of appContent (unlike the standalone #loginScreen), so unlike .login-screen
+   this needs to actually overlay rather than sit in normal document flow. Above .modal's
+   z-index since it can be prompted right in the middle of using the app. */
+#passwordSetupModal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
+}
+
 .login-card {
   background: var(--card-bg);
   border: 1px solid var(--border);

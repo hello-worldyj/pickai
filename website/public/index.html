@@ -26,6 +26,20 @@
   </div>
 </div>
 
+<div id="passwordSetupModal" class="login-screen" hidden>
+  <div class="login-card">
+    <h1>Set a Password</h1>
+    <p class="login-hint">
+      You signed up with Google. Set a password too so you can also sign in from the Mac
+      app, which only supports email/password.
+    </p>
+    <input id="setupPassword" type="password" placeholder="New password" autocomplete="new-password" />
+    <button id="setupPasswordSubmit" class="login-submit">Set Password</button>
+    <button id="setupPasswordSkip" class="login-secondary" style="margin-top: 8px; width: 100%;">Skip for now</button>
+    <p id="setupPasswordError" class="login-error" hidden></p>
+  </div>
+</div>
+
 <div id="appContent" hidden>
   <header>
     <div class="title-row">

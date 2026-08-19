@@ -2,7 +2,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/fireba
 import {
   getAuth,
   GoogleAuthProvider,
+  EmailAuthProvider,
   signInWithPopup,
+  getAdditionalUserInfo,
+  linkWithCredential,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -33,6 +36,11 @@ const loginError = document.getElementById("loginError");
 const appContent = document.getElementById("appContent");
 const accountEmail = document.getElementById("accountEmail");
 const signOutBtn = document.getElementById("signOutBtn");
+const passwordSetupModal = document.getElementById("passwordSetupModal");
+const setupPasswordInput = document.getElementById("setupPassword");
+const setupPasswordSubmit = document.getElementById("setupPasswordSubmit");
+const setupPasswordSkip = document.getElementById("setupPasswordSkip");
+const setupPasswordError = document.getElementById("setupPasswordError");
 
 const grid = document.getElementById("grid");
 const emptyEl = document.getElementById("empty");
@@ -97,10 +105,40 @@ function showLoginError(message) {
 googleSignInBtn.addEventListener("click", async () => {
   loginError.hidden = true;
   try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
+    const result = await signInWithPopup(auth, new GoogleAuthProvider());
+    // Google accounts have no password by default — prompt once, right after the first
+    // sign-up, so they can also use the Mac app (which only supports email/password).
+    if (getAdditionalUserInfo(result)?.isNewUser) {
+      passwordSetupModal.hidden = false;
+    }
   } catch (err) {
     showLoginError("Google sign-in failed — try again.");
   }
+});
+
+setupPasswordSubmit.addEventListener("click", async () => {
+  setupPasswordError.hidden = true;
+  const password = setupPasswordInput.value;
+  if (password.length < 6) {
+    setupPasswordError.hidden = false;
+    setupPasswordError.textContent = "Password must be at least 6 characters.";
+    return;
+  }
+  try {
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    await linkWithCredential(auth.currentUser, credential);
+    passwordSetupModal.hidden = true;
+    setupPasswordInput.value = "";
+  } catch (err) {
+    setupPasswordError.hidden = false;
+    setupPasswordError.textContent = "Couldn't set password — try again.";
+  }
+});
+
+setupPasswordSkip.addEventListener("click", () => {
+  passwordSetupModal.hidden = true;
+  setupPasswordInput.value = "";
+  setupPasswordError.hidden = true;
 });
 
 loginSignInBtn.addEventListener("click", async () => {
