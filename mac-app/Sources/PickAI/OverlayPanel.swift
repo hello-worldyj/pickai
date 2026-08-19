@@ -13,9 +13,11 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        // Excludes this window from screenshots, screen recordings, and screen shares
-        // (e.g. Cmd+Shift+4, QuickTime, Zoom/Meet screen share) — it's still visible on-screen.
-        sharingType = .none
+        // sharingType = .none (excludes this window from screenshots/screen recordings) breaks
+        // window compositing over some apps (confirmed with Chrome) — the panel renders behind
+        // the frontmost app's window instead of on top of it. Reliable visibility matters more
+        // than screenshot-invisibility, so this stays off.
+        // sharingType = .none
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
