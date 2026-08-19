@@ -215,3 +215,64 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 }
 
 .login-error { color: #ff453a; font-size: 12px; margin: 12px 0 0; }
+
+.sort-select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.modal-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.delete-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #ff453a;
+  background: transparent;
+  color: #ff453a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-btn:hover { background: rgba(255, 69, 58, 0.1); }
+
+.delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.delete-cancel {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.delete-confirm-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #ff453a;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}

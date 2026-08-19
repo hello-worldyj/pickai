@@ -27,6 +27,10 @@
         <button class="filter-btn" data-mode="answer">Answer</button>
         <button class="filter-btn" data-mode="explain">Explain</button>
       </div>
+      <select id="sortOrder" class="sort-select">
+        <option value="desc">Newest first</option>
+        <option value="asc">Oldest first</option>
+      </select>
     </div>
   </header>
   <main id="grid" class="grid"></main>
@@ -43,6 +47,14 @@
       <p id="modalMeta" class="modal-meta"></p>
       <h2 id="modalQuestion"></h2>
       <p id="modalAnswer" class="modal-answer"></p>
+      <div class="modal-footer">
+        <button id="modalDelete" class="delete-btn">Delete</button>
+        <div id="modalDeleteConfirm" class="delete-confirm" hidden>
+          <span>Delete this entry?</span>
+          <button id="modalDeleteCancel" class="delete-cancel">Cancel</button>
+          <button id="modalDeleteConfirmBtn" class="delete-confirm-btn">Delete</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

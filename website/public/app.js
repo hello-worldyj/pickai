@@ -14,12 +14,17 @@ const retryBtn = document.getElementById("retryBtn");
 const loadMoreBtn = document.getElementById("loadMore");
 const searchInput = document.getElementById("search");
 const filterBtns = document.querySelectorAll(".filter-btn");
+const sortSelect = document.getElementById("sortOrder");
 const modal = document.getElementById("modal");
 const modalClose = document.getElementById("modalClose");
 const modalImage = document.getElementById("modalImage");
 const modalMeta = document.getElementById("modalMeta");
 const modalQuestion = document.getElementById("modalQuestion");
 const modalAnswer = document.getElementById("modalAnswer");
+const modalDelete = document.getElementById("modalDelete");
+const modalDeleteConfirm = document.getElementById("modalDeleteConfirm");
+const modalDeleteCancel = document.getElementById("modalDeleteCancel");
+const modalDeleteConfirmBtn = document.getElementById("modalDeleteConfirmBtn");
 
 // Inline "broken image" placeholder (small gray square) — used instead of the
 // browser's default broken-image icon when a screenshot fails to load.
@@ -28,8 +33,10 @@ const IMAGE_FALLBACK =
 
 let currentMode = "";
 let currentQuery = "";
+let currentOrder = "desc";
 let lastId;
 let debounceTimer = null;
+let activeEntryId = null;
 
 function accessKey() {
   return localStorage.getItem(STORAGE_KEY);
@@ -102,6 +109,7 @@ function formatTime(iso) {
 function renderCard(entry) {
   const card = document.createElement("div");
   card.className = "card";
+  card.dataset.id = String(entry.id);
   card.innerHTML = `
     ${entry.image_key ? `<img loading="lazy" />` : ""}
     <div class="card-meta">
@@ -134,6 +142,7 @@ async function loadAuthedImage(key) {
 }
 
 function openModal(entry) {
+  activeEntryId = entry.id;
   modalImage.hidden = !entry.image_key;
   if (entry.image_key) {
     loadAuthedImage(entry.image_key).then((url) => { modalImage.src = url; });
@@ -141,12 +150,56 @@ function openModal(entry) {
   modalMeta.textContent = `${entry.mode} · ${formatTime(entry.created_at)}`;
   modalQuestion.textContent = entry.question || "(screenshot)";
   modalAnswer.textContent = entry.answer;
+  resetDeleteConfirm();
   modal.hidden = false;
 }
 
-modalClose.addEventListener("click", () => { modal.hidden = true; });
+function closeModal() {
+  modal.hidden = true;
+  activeEntryId = null;
+  resetDeleteConfirm();
+}
+
+function resetDeleteConfirm() {
+  modalDelete.hidden = false;
+  modalDeleteConfirm.hidden = true;
+}
+
+modalClose.addEventListener("click", closeModal);
 modal.addEventListener("click", (e) => {
-  if (e.target === modal) modal.hidden = true;
+  if (e.target === modal) closeModal();
+});
+
+modalDelete.addEventListener("click", () => {
+  modalDelete.hidden = true;
+  modalDeleteConfirm.hidden = false;
+});
+
+modalDeleteCancel.addEventListener("click", resetDeleteConfirm);
+
+modalDeleteConfirmBtn.addEventListener("click", async () => {
+  if (activeEntryId === null) return;
+  modalDeleteConfirmBtn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/history/${activeEntryId}`, {
+      method: "DELETE",
+      headers: { "X-History-Key": accessKey() ?? "" },
+    });
+    if (res.status === 401) {
+      localStorage.removeItem(STORAGE_KEY);
+      closeModal();
+      showLogin("Session expired — enter your key again.");
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const card = grid.querySelector(`.card[data-id="${activeEntryId}"]`);
+    if (card) card.remove();
+    closeModal();
+    if (!grid.children.length) emptyEl.hidden = false;
+  } catch (err) {
+    modalDeleteConfirmBtn.disabled = false;
+    alert("Couldn't delete — try again.");
+  }
 });
 
 async function loadEntries(reset) {
@@ -159,7 +212,8 @@ async function loadEntries(reset) {
   const params = new URLSearchParams();
   if (currentQuery) params.set("q", currentQuery);
   if (currentMode) params.set("mode", currentMode);
-  if (lastId !== undefined) params.set("beforeId", String(lastId));
+  params.set("order", currentOrder);
+  if (lastId !== undefined) params.set("cursorId", String(lastId));
 
   let rows;
   try {
@@ -215,5 +269,10 @@ filterBtns.forEach((btn) => {
 });
 
 loadMoreBtn.addEventListener("click", () => loadEntries(false));
+
+sortSelect.addEventListener("change", () => {
+  currentOrder = sortSelect.value;
+  loadEntries(true);
+});
 
 trySavedKeyOrShowLogin();
