@@ -1,11 +1,38 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+const firebaseConfig = {
+  projectId: "picky-ai",
+  appId: "1:466839117567:web:49b511c303b52bd38d76ca",
+  storageBucket: "picky-ai.firebasestorage.app",
+  apiKey: "AIzaSyBU9P_p_Hqgi8Eo2DeGiRFRKUK1rL94W4g",
+  authDomain: "picky-ai.firebaseapp.com",
+  messagingSenderId: "466839117567",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+
 const API_BASE = "https://pick-ai-history.byeongminchoi12.workers.dev";
-const STORAGE_KEY = "historyAccessKey";
 
 const loginScreen = document.getElementById("loginScreen");
-const loginKeyInput = document.getElementById("loginKey");
-const loginSubmit = document.getElementById("loginSubmit");
+const googleSignInBtn = document.getElementById("googleSignIn");
+const loginEmailInput = document.getElementById("loginEmail");
+const loginPasswordInput = document.getElementById("loginPassword");
+const loginSignInBtn = document.getElementById("loginSignIn");
+const loginSignUpBtn = document.getElementById("loginSignUp");
 const loginError = document.getElementById("loginError");
 const appContent = document.getElementById("appContent");
+const accountEmail = document.getElementById("accountEmail");
+const signOutBtn = document.getElementById("signOutBtn");
 
 const grid = document.getElementById("grid");
 const emptyEl = document.getElementById("empty");
@@ -38,62 +65,70 @@ let lastId;
 let debounceTimer = null;
 let activeEntryId = null;
 
-function accessKey() {
-  return localStorage.getItem(STORAGE_KEY);
-}
-
-function apiFetch(path) {
+// Every API call fetches the current ID token fresh — the Firebase SDK transparently
+// refreshes it under the hood when it's close to expiring, so this never uses a stale token.
+async function apiFetch(path, options = {}) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in");
+  const token = await user.getIdToken();
   return fetch(`${API_BASE}${path}`, {
-    headers: { "X-History-Key": accessKey() ?? "" },
+    ...options,
+    headers: { ...(options.headers ?? {}), Authorization: `Bearer ${token}` },
   });
 }
 
-function showLogin(message) {
+function showLogin() {
   appContent.hidden = true;
   loginScreen.hidden = false;
-  loginError.hidden = !message;
-  if (message) loginError.textContent = message;
 }
 
-function showApp() {
+function showApp(user) {
   loginScreen.hidden = true;
   appContent.hidden = false;
-}
-
-async function trySavedKeyOrShowLogin() {
-  if (!accessKey()) {
-    showLogin();
-    return;
-  }
-  // Verify the stored key still works before committing to showing the app —
-  // an old/revoked key should bounce back to the login screen, not a blank app.
-  const res = await apiFetch("/api/history?limit=1");
-  if (res.status === 401) {
-    localStorage.removeItem(STORAGE_KEY);
-    showLogin("Saved key no longer works — enter it again.");
-    return;
-  }
-  showApp();
+  accountEmail.textContent = user.email ?? "";
   loadEntries(true);
 }
 
-loginSubmit.addEventListener("click", async () => {
-  const key = loginKeyInput.value.trim();
-  if (!key) return;
-  localStorage.setItem(STORAGE_KEY, key);
-  const res = await apiFetch("/api/history?limit=1");
-  if (res.status === 401) {
-    localStorage.removeItem(STORAGE_KEY);
-    loginError.hidden = false;
-    loginError.textContent = "Wrong key — try again.";
-    return;
+function showLoginError(message) {
+  loginError.hidden = false;
+  loginError.textContent = message;
+}
+
+googleSignInBtn.addEventListener("click", async () => {
+  loginError.hidden = true;
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch (err) {
+    showLoginError("Google sign-in failed — try again.");
   }
-  showApp();
-  loadEntries(true);
 });
 
-loginKeyInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loginSubmit.click();
+loginSignInBtn.addEventListener("click", async () => {
+  loginError.hidden = true;
+  try {
+    await signInWithEmailAndPassword(auth, loginEmailInput.value.trim(), loginPasswordInput.value);
+  } catch (err) {
+    showLoginError("Wrong email or password.");
+  }
+});
+
+loginSignUpBtn.addEventListener("click", async () => {
+  loginError.hidden = true;
+  try {
+    await createUserWithEmailAndPassword(auth, loginEmailInput.value.trim(), loginPasswordInput.value);
+  } catch (err) {
+    showLoginError(err.code === "auth/weak-password" ? "Password must be at least 6 characters." : "Couldn't create account — check the email and try again.");
+  }
+});
+
+signOutBtn.addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    showApp(user);
+  } else {
+    showLogin();
+  }
 });
 
 function escapeHtml(str) {
@@ -128,8 +163,8 @@ function renderCard(entry) {
   return card;
 }
 
-// Images need the access-key header too (same auth as /api/history), so a plain
-// <img src> can't be used directly — fetch with the header and swap in a blob URL.
+// Images need the same bearer-token auth as /api/history, so a plain <img src> can't be
+// used directly — fetch with the header and swap in a blob URL.
 async function loadAuthedImage(key) {
   try {
     const res = await apiFetch(`/api/image/${encodeURIComponent(key)}`);
@@ -181,16 +216,7 @@ modalDeleteConfirmBtn.addEventListener("click", async () => {
   if (activeEntryId === null) return;
   modalDeleteConfirmBtn.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/api/history/${activeEntryId}`, {
-      method: "DELETE",
-      headers: { "X-History-Key": accessKey() ?? "" },
-    });
-    if (res.status === 401) {
-      localStorage.removeItem(STORAGE_KEY);
-      closeModal();
-      showLogin("Session expired — enter your key again.");
-      return;
-    }
+    const res = await apiFetch(`/api/history/${activeEntryId}`, { method: "DELETE" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const card = grid.querySelector(`.card[data-id="${activeEntryId}"]`);
     if (card) card.remove();
@@ -218,11 +244,6 @@ async function loadEntries(reset) {
   let rows;
   try {
     const res = await apiFetch(`/api/history?${params.toString()}`);
-    if (res.status === 401) {
-      localStorage.removeItem(STORAGE_KEY);
-      showLogin("Session expired — enter your key again.");
-      return;
-    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     rows = await res.json();
   } catch (err) {
@@ -274,5 +295,3 @@ sortSelect.addEventListener("change", () => {
   currentOrder = sortSelect.value;
   loadEntries(true);
 });
-
-trySavedKeyOrShowLogin();

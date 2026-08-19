@@ -4,5 +4,6 @@ CREATE TABLE history (
     mode TEXT NOT NULL,
     question TEXT,
     answer TEXT NOT NULL,
-    image_key TEXT
+    image_key TEXT,
+    user_id TEXT
 );

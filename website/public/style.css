@@ -216,6 +216,91 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 
 .login-error { color: #ff453a; font-size: 12px; margin: 12px 0 0; }
 
+.google-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.google-btn:hover { background: var(--card-bg); }
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin: 4px 0 16px;
+}
+
+.login-divider::before, .login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.login-divider span { padding: 0 10px; }
+
+.login-email-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.login-email-actions .login-submit { margin-bottom: 0; }
+
+.login-secondary {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.title-row h1 { margin: 0; }
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.signout-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .sort-select {
   padding: 8px 12px;
   border-radius: 8px;
