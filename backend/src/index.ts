@@ -1,7 +1,15 @@
+import { uploadToB2 } from "./b2";
+import { recordHistory } from "./history";
+
 export interface Env {
   OPENAI_API_KEY: string;
   SHARED_SECRET: string;
   OPENAI_MODEL: string;
+  HISTORY_DB: D1Database;
+  B2_KEY_ID: string;
+  B2_APPLICATION_KEY: string;
+  B2_BUCKET: string;
+  B2_ENDPOINT: string;
 }
 
 type Mode = "answer" | "explain";
@@ -60,7 +68,7 @@ function toChatContent(message: Message): ChatContent {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname !== "/query" || request.method !== "POST") {
@@ -114,6 +122,32 @@ export default {
     }>();
 
     const result = data.choices[0]?.message?.content?.trim() ?? "";
+
+    // The most recent message is this turn's question — for the very first exchange
+    // of a session that's the screenshot/text that kicked it off; for a follow-up it's
+    // always text (the app never re-sends the original image on follow-ups), so this
+    // naturally uploads the screenshot exactly once per session, not on every turn.
+    const lastMessage = body.messages[body.messages.length - 1];
+    const imageKey = lastMessage.imageBase64 ? `${Date.now()}-${crypto.randomUUID()}.png` : null;
+
+    ctx.waitUntil(
+      (async () => {
+        try {
+          if (imageKey && lastMessage.imageBase64) {
+            const bytes = Uint8Array.from(atob(lastMessage.imageBase64), (c) => c.charCodeAt(0));
+            await uploadToB2(env, imageKey, bytes, "image/png");
+          }
+          await recordHistory(env, {
+            mode: body.mode,
+            question: lastMessage.text ?? null,
+            answer: result,
+            imageKey,
+          });
+        } catch (err) {
+          console.error("history persistence failed:", err);
+        }
+      })()
+    );
 
     return new Response(JSON.stringify({ result }), {
       headers: { "Content-Type": "application/json" },
