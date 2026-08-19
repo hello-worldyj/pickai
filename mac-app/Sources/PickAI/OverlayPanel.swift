@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 private final class OverlayPanel: NSPanel {
     convenience init() {
@@ -12,9 +13,11 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        // Excludes this window from screenshots, screen recordings, and screen shares
-        // (e.g. Cmd+Shift+4, QuickTime, Zoom/Meet screen share) — it's still visible on-screen.
-        sharingType = .none
+        // TEMPORARILY DISABLED for diagnosis: sharingType = .none (excludes from screenshots/
+        // screen shares) is suspected of not compositing correctly over a fullscreen app's
+        // Space in some cases — this is the one variable that couldn't be verified without the
+        // user's real environment. Re-enable once confirmed either way.
+        // sharingType = .none
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
@@ -31,7 +34,6 @@ final class OverlayController: NSObject {
 
     private var conversation: [ChatMessage] = []
     private var activeMode: QueryMode = .answer
-    private var initialImagePNGData: Data?
 
     private let stack = NSStackView()
     private let previewLabel = NSTextField(wrappingLabelWithString: "")
@@ -55,22 +57,52 @@ final class OverlayController: NSObject {
 
     func show(text: String, at screenPoint: NSPoint) {
         conversation = [.user(text: text)]
-        initialImagePNGData = nil
         previewLabel.stringValue = String(text.prefix(140))
         setState(.choosing)
         position(at: screenPoint)
         panel.makeKeyAndOrderFront(nil)
         installDismissMonitors()
+        logVisibility(trigger: "text", at: screenPoint)
     }
 
     func show(imagePNGData: Data, at screenPoint: NSPoint) {
         conversation = [.user(imagePNGData: imagePNGData)]
-        initialImagePNGData = imagePNGData
         previewLabel.stringValue = "📷 Screenshot captured"
         setState(.choosing)
         position(at: screenPoint)
         panel.makeKeyAndOrderFront(nil)
         installDismissMonitors()
+        logVisibility(trigger: "screenshot", at: screenPoint)
+    }
+
+    /// The popup has been reported as sometimes not appearing with no other symptom — likely
+    /// while the frontmost app is in native fullscreen, where a window can exist and still not
+    /// actually be visible if it isn't correctly composited into that fullscreen Space. This
+    /// can't be safely reproduced against a live, actively-used screen, so log everything
+    /// needed to diagnose it after the fact instead.
+    private func logVisibility(trigger: String, at screenPoint: NSPoint) {
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(screenPoint) }) ?? NSScreen.main
+        NSLog(
+            "[PickAI] show(\(trigger)) at=\(screenPoint) panelFrame=\(panel.frame) isVisible=\(panel.isVisible) "
+                + "isKeyWindow=\(panel.isKeyWindow) screen=\(String(describing: screen?.frame)) "
+                + "frontmostAppFullScreen=\(Self.isFrontmostAppFullScreen())"
+        )
+    }
+
+    /// Queries the frontmost app's focused window via Accessibility rather than anything on
+    /// Pick AI's own process — NSApp.presentationOptions only reflects Pick AI's own state,
+    /// not whichever other app the user is actually looking at.
+    private static func isFrontmostAppFullScreen() -> Bool {
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return false }
+        let axApp = AXUIElementCreateApplication(frontApp.processIdentifier)
+        var windowValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
+              let window = windowValue else { return false }
+        var fullScreenValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window as! AXUIElement, "AXFullScreen" as CFString, &fullScreenValue) == .success else {
+            return false
+        }
+        return (fullScreenValue as? Bool) ?? false
     }
 
     func dismiss() {
@@ -299,18 +331,14 @@ final class OverlayController: NSObject {
         setState(.loading)
         let messages = conversation
         let mode = activeMode
-        let isFirstExchange = messages.count == 1
         Task {
             do {
                 let result = try await BackendClient.query(messages: messages, mode: mode)
                 conversation.append(.assistant(text: result))
                 setState(.result(result))
-                HistoryStore.save(
-                    mode: mode,
-                    question: messages.last(where: { $0.role == "user" })?.text,
-                    answer: result,
-                    imagePNGData: isFirstExchange ? initialImagePNGData : nil
-                )
+                // Persistence now happens server-side (backend Worker -> D1/B2) so the app
+                // doesn't need to know about it at all — see HistoryWindowController for how
+                // that history is browsed from within the app.
             } catch {
                 setState(.result("Error: \(error.localizedDescription)"))
             }

@@ -1,5 +1,7 @@
 import AppKit
 import ApplicationServices
+import FirebaseCore
+import GoogleSignIn
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -9,8 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var selectionHotkeyMonitor: HotkeyMonitor?
     private var healthTimer: Timer?
     private let overlay = OverlayController()
+    private let historyWindow = HistoryWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        FirebaseApp.configure()
+
         // PickAI has no regular window (LSUIElement + .accessory), so AppKit's Automatic
         // Termination considers it idle-eligible and macOS silently kills it in the
         // background — this is why the hotkeys would stop responding after a while.
@@ -88,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(withTitle: "Wake Pick AI Up Here", action: #selector(wakeUpHere), keyEquivalent: "")
-        menu.addItem(withTitle: "Open History Folder", action: #selector(openHistoryFolder), keyEquivalent: "")
+        menu.addItem(withTitle: "Open Pick AI History", action: #selector(openHistoryWindow), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Open Accessibility Settings…", action: #selector(openAccessibilitySettings), keyEquivalent: "")
         menu.addItem(withTitle: "Open Screen Recording Settings…", action: #selector(openScreenRecordingSettings), keyEquivalent: "")
@@ -110,8 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureAndSolve()
     }
 
-    @objc private func openHistoryFolder() {
-        NSWorkspace.shared.open(HistoryStore.directoryURL)
+    @objc private func openHistoryWindow() {
+        historyWindow.show()
     }
 
     @objc private func openAccessibilitySettings() {
@@ -127,6 +132,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() {
         NSLog("[PickAI] Quit Pick AI selected from menu — terminating voluntarily")
         NSApp.terminate(nil)
+    }
+
+    /// Google Sign-In's OAuth flow redirects back into the app via the custom URL scheme
+    /// registered in Info.plist (CFBundleURLTypes) — this is where that redirect lands.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            GIDSignIn.sharedInstance.handle(url)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

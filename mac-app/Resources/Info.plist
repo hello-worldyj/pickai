@@ -22,5 +22,14 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.466839117567-s5sp3lq4ooo5c9pgkfml2p656vcro2jk</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
