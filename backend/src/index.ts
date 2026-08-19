@@ -27,7 +27,10 @@ interface QueryRequest {
 }
 
 const SYSTEM_PROMPTS: Record<Mode, string> = {
-  answer: "Answer as directly and briefly as possible. No explanation, no preamble, just the answer. If the user asks a follow-up question, keep answering directly and briefly.",
+  answer:
+    "Give ONLY the final answer, nothing else. No restating the question, no work shown, no steps, no preamble, no LaTeX or math notation (no \\( \\), \\[ \\], $, or similar) — plain text only. " +
+    'For a math or computation question, respond in exactly this format: "The answer is: <result>". For any other question, respond with just the answer itself in one short line. ' +
+    "If the user asks a follow-up question, keep answering in this same terse style.",
   explain: "Give a clear, step-by-step explanation. Be thorough but concise. If the user asks a follow-up question, continue explaining in the same style.",
 };
 
