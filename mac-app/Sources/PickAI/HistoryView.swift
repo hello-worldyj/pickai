@@ -150,6 +150,7 @@ struct HistoryListView: View {
     @State private var canLoadMore = false
     @State private var selectedEntry: HistoryEntry?
     @State private var searchTask: Task<Void, Never>?
+    @State private var latestKnownId: Int?
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
 
@@ -161,6 +162,7 @@ struct HistoryListView: View {
         }
         .frame(minWidth: 600, minHeight: 480)
         .task { await load(reset: true) }
+        .task { await pollForNewEntriesLoop() }
         .sheet(item: $selectedEntry) { entry in
             HistoryDetailView(
                 entry: entry,
@@ -271,10 +273,34 @@ struct HistoryListView: View {
             )
             if reset { entries = rows } else { entries.append(contentsOf: rows) }
             canLoadMore = rows.count >= 30
+            // Live-update polling only tracks "newer than the top of the default view" —
+            // only meaningful right after a from-scratch load of that exact view.
+            if reset, order == .desc, searchText.isEmpty, mode.isEmpty, let first = rows.first {
+                latestKnownId = first.id
+            }
         } catch HistoryAPIError.unauthorized {
             onLogout()
         } catch {
             errorMessage = "Couldn't load history."
+        }
+    }
+
+    /// Polls for entries newer than the top of the list and prepends them quietly, without
+    /// disturbing scroll position, search text, or filters — only runs on the default
+    /// newest-first/unfiltered view, where "what's new" is unambiguous. A full push/websocket
+    /// setup would be overkill for this at personal scale; a short poll is imperceptible.
+    private func pollForNewEntriesLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled else { return }
+            guard let latestKnownId, order == .desc, searchText.isEmpty, mode.isEmpty else { continue }
+            guard let rows = try? await HistoryAPIClient.fetchHistory(query: nil, mode: nil, order: .desc, cursorId: nil) else {
+                continue
+            }
+            let newRows = rows.filter { $0.id > latestKnownId }
+            guard !newRows.isEmpty else { continue }
+            entries.insert(contentsOf: newRows, at: 0)
+            self.latestKnownId = newRows.map(\.id).max()
         }
     }
 }
