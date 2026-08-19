@@ -1,1 +1,40 @@
-<!doctype html><title>placeholder</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pick AI History</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <h1>Pick AI History</h1>
+  <div class="controls">
+    <input id="search" type="search" placeholder="Search questions and answers…" />
+    <div class="filters">
+      <button class="filter-btn active" data-mode="">All</button>
+      <button class="filter-btn" data-mode="answer">Answer</button>
+      <button class="filter-btn" data-mode="explain">Explain</button>
+    </div>
+  </div>
+</header>
+<main id="grid" class="grid"></main>
+<p id="empty" class="empty" hidden>No entries yet.</p>
+<div id="errorState" class="empty" hidden>
+  Couldn't load history. <button id="retryBtn" class="load-more">Retry</button>
+</div>
+<button id="loadMore" class="load-more" hidden>Load more</button>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-content">
+    <button id="modalClose" class="modal-close">&times;</button>
+    <img id="modalImage" class="modal-image" hidden />
+    <p id="modalMeta" class="modal-meta"></p>
+    <h2 id="modalQuestion"></h2>
+    <p id="modalAnswer" class="modal-answer"></p>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
