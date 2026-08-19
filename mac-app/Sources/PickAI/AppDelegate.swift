@@ -1,6 +1,5 @@
 import AppKit
 import ApplicationServices
-import FirebaseCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -13,8 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let historyWindow = HistoryWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        FirebaseApp.configure()
-
         // PickAI has no regular window (LSUIElement + .accessory), so AppKit's Automatic
         // Termination considers it idle-eligible and macOS silently kills it in the
         // background — this is why the hotkeys would stop responding after a while.

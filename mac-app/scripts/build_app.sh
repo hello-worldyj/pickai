@@ -17,15 +17,6 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
-cp "Resources/GoogleService-Info.plist" "${APP_BUNDLE}/Contents/Resources/GoogleService-Info.plist"
-
-# Firebase/GoogleSignIn's SPM resource bundles (localized strings, images) — needed at
-# runtime, not just build time, so they have to be embedded in the shipped app bundle too.
-shopt -s nullglob
-for bundle in "${BUILD_DIR}"/*.bundle; do
-    cp -R "$bundle" "${APP_BUNDLE}/Contents/Resources/"
-done
-shopt -u nullglob
 
 echo "Codesigning with local dev identity..."
 # This project lives in an iCloud-Drive-synced folder, and the file-provider daemon keeps

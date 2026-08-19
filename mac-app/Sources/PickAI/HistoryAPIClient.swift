@@ -1,5 +1,4 @@
 import Foundation
-import FirebaseAuth
 
 struct HistoryEntry: Decodable, Identifiable {
     let id: Int
@@ -26,11 +25,12 @@ enum HistoryAPIError: Error {
 enum HistoryAPIClient {
     static let baseURL = URL(string: "https://pick-ai-history.byeongminchoi12.workers.dev")!
 
-    /// Fetches a fresh ID token every call — the Firebase SDK transparently refreshes it
+    /// Fetches a fresh ID token every call — FirebaseRestAuth transparently refreshes it
     /// under the hood when it's close to expiring, so this never hands back a stale token.
     private static func authorizedRequest(url: URL) async throws -> URLRequest {
-        guard let user = Auth.auth().currentUser else { throw HistoryAPIError.notSignedIn }
-        let token = try await user.getIDToken()
+        guard let token = try await FirebaseRestAuth.currentIDToken() else {
+            throw HistoryAPIError.notSignedIn
+        }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return request

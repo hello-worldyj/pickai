@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import FirebaseAuth
 
 enum AppColorScheme: String, CaseIterable {
     case system, light, dark
@@ -43,8 +42,7 @@ private func formattedDate(_ iso: String) -> String {
 
 struct HistoryRootView: View {
     @AppStorage("historyColorScheme") private var colorSchemeRaw = AppColorScheme.system.rawValue
-    @State private var currentUser: User? = Auth.auth().currentUser
-    @State private var authListenerHandle: AuthStateDidChangeListenerHandle?
+    @State private var isSignedIn = FirebaseRestAuth.isSignedIn
 
     @State private var email = ""
     @State private var password = ""
@@ -57,19 +55,17 @@ struct HistoryRootView: View {
 
     var body: some View {
         Group {
-            if let currentUser {
-                HistoryListView(onLogout: { try? Auth.auth().signOut() })
-                    .environment(\.currentUserEmail, currentUser.email ?? "")
+            if isSignedIn {
+                HistoryListView(onLogout: {
+                    FirebaseRestAuth.signOut()
+                    isSignedIn = false
+                })
+                .environment(\.currentUserEmail, FirebaseRestAuth.currentUserEmail ?? "")
             } else {
                 loginView
             }
         }
         .preferredColorScheme(colorScheme.colorScheme)
-        .onAppear {
-            authListenerHandle = Auth.auth().addStateDidChangeListener { _, user in
-                currentUser = user
-            }
-        }
     }
 
     private var loginView: some View {
@@ -114,17 +110,19 @@ struct HistoryRootView: View {
         loginError = nil
         defer { isSubmitting = false }
         do {
-            _ = try await Auth.auth().signIn(
-                withEmail: email.trimmingCharacters(in: .whitespacesAndNewlines),
+            try await FirebaseRestAuth.signIn(
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password
             )
+            isSignedIn = true
+        } catch FirebaseRestAuth.AuthError.other(let message) {
+            NSLog("[PickAI] native sign-in error: \(message)")
+            loginError = "Sign-in failed: \(message)"
         } catch {
             NSLog("[PickAI] native sign-in error: \(error)")
-            let nsError = error as NSError
-            loginError = "Sign-in failed: \(nsError.localizedDescription) (code \(nsError.code))"
+            loginError = "Wrong email or password."
         }
     }
-
 }
 
 private struct CurrentUserEmailKey: EnvironmentKey {
