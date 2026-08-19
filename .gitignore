@@ -4,3 +4,4 @@ node_modules/
 .DS_Store
 mac-app/.build/
 mac-app/PickAI.app/
+.worktrees/
