@@ -266,6 +266,8 @@ modalDeleteConfirmBtn.addEventListener("click", async () => {
   }
 });
 
+let latestKnownId;
+
 async function loadEntries(reset) {
   if (reset) {
     grid.innerHTML = "";
@@ -305,8 +307,38 @@ async function loadEntries(reset) {
   if (rows.length > 0) {
     lastId = rows[rows.length - 1].id;
   }
+  // Live-update polling only tracks "newer than the top of the default view" — only
+  // meaningful right after a from-scratch load of that exact view (see pollForNewEntries).
+  if (reset && currentOrder === "desc" && !currentQuery && !currentMode && rows.length > 0) {
+    latestKnownId = rows[0].id;
+  }
   loadMoreBtn.hidden = rows.length < 30;
 }
+
+// Polls for entries newer than the top of the list and prepends them quietly, without
+// disturbing scroll position, search text, or filters — only runs on the default
+// newest-first/unfiltered view, where "what's new" is unambiguous. A full WebSocket/push
+// setup would be overkill for this at personal scale; a short poll is imperceptible.
+async function pollForNewEntries() {
+  if (latestKnownId === undefined || currentQuery || currentMode || currentOrder !== "desc") return;
+  if (!auth.currentUser) return;
+  try {
+    const res = await apiFetch("/api/history?order=desc&limit=30");
+    if (!res.ok) return;
+    const rows = await res.json();
+    const newRows = rows.filter((r) => r.id > latestKnownId);
+    if (newRows.length === 0) return;
+    for (const entry of newRows.reverse()) {
+      grid.insertBefore(renderCard(entry), grid.firstChild);
+    }
+    latestKnownId = Math.max(latestKnownId, ...newRows.map((r) => r.id));
+    emptyEl.hidden = true;
+  } catch {
+    // Silent — a failed poll just tries again next interval.
+  }
+}
+
+setInterval(pollForNewEntries, 8000);
 
 retryBtn.addEventListener("click", () => loadEntries(true));
 
