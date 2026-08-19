@@ -1,7 +1,6 @@
 import AppKit
 import ApplicationServices
 import FirebaseCore
-import GoogleSignIn
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -132,14 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() {
         NSLog("[PickAI] Quit Pick AI selected from menu — terminating voluntarily")
         NSApp.terminate(nil)
-    }
-
-    /// Google Sign-In's OAuth flow redirects back into the app via the custom URL scheme
-    /// registered in Info.plist (CFBundleURLTypes) — this is where that redirect lands.
-    func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            GIDSignIn.sharedInstance.handle(url)
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

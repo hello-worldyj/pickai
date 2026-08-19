@@ -1,8 +1,6 @@
 import SwiftUI
 import AppKit
-import FirebaseCore
 import FirebaseAuth
-import GoogleSignIn
 
 enum AppColorScheme: String, CaseIterable {
     case system, light, dark
@@ -77,26 +75,10 @@ struct HistoryRootView: View {
     private var loginView: some View {
         VStack(spacing: 16) {
             Text("Pick AI History").font(.title2.bold())
-            Text("Sign in to see your history.")
+            Text("Sign in with your Pick AI account.\n(Create one on picky-ai.web.app if you signed up with Google there — this app only supports email/password.)")
                 .foregroundStyle(.secondary)
                 .font(.callout)
-
-            Button(action: signInWithGoogle) {
-                HStack {
-                    Image(systemName: "globe")
-                    Text("Continue with Google")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .frame(width: 260)
-
-            HStack {
-                Rectangle().fill(.separator).frame(height: 1)
-                Text("or").font(.caption).foregroundStyle(.secondary)
-                Rectangle().fill(.separator).frame(height: 1)
-            }
-            .frame(width: 260)
+                .multilineTextAlignment(.center)
 
             TextField("Email", text: $email)
                 .textFieldStyle(.roundedBorder)
@@ -120,46 +102,6 @@ struct HistoryRootView: View {
         }
         .padding(40)
         .frame(minWidth: 360, minHeight: 340)
-    }
-
-    private func signInWithGoogle() {
-        loginError = nil
-        guard let clientID = FirebaseApp.app()?.options.clientID else {
-            NSLog("[PickAI] Google sign-in: no FirebaseApp clientID available")
-            loginError = "Google sign-in failed — try again."
-            return
-        }
-        guard let window = NSApplication.shared.keyWindow else {
-            NSLog("[PickAI] Google sign-in: no key window to present from")
-            loginError = "Google sign-in failed — try again."
-            return
-        }
-
-        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
-        GIDSignIn.sharedInstance.signIn(withPresenting: window) { result, error in
-            if let error {
-                NSLog("[PickAI] Google sign-in: GIDSignIn error: \(error)")
-                loginError = "Google sign-in failed — try again."
-                return
-            }
-            guard let result else {
-                NSLog("[PickAI] Google sign-in: GIDSignIn returned no result and no error")
-                loginError = "Google sign-in failed — try again."
-                return
-            }
-            guard let idToken = result.user.idToken?.tokenString else {
-                NSLog("[PickAI] Google sign-in: GIDSignIn result had no ID token")
-                loginError = "Google sign-in failed — try again."
-                return
-            }
-            let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: result.user.accessToken.tokenString)
-            Auth.auth().signIn(with: credential) { _, error in
-                if let error {
-                    NSLog("[PickAI] Google sign-in: Firebase signIn(with:) error: \(error)")
-                    loginError = "Google sign-in failed — try again."
-                }
-            }
-        }
     }
 
     private func signIn() async {
