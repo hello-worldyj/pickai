@@ -7,31 +7,43 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-<header>
-  <h1>Pick AI History</h1>
-  <div class="controls">
-    <input id="search" type="search" placeholder="Search questions and answers…" />
-    <div class="filters">
-      <button class="filter-btn active" data-mode="">All</button>
-      <button class="filter-btn" data-mode="answer">Answer</button>
-      <button class="filter-btn" data-mode="explain">Explain</button>
-    </div>
+<div id="loginScreen" class="login-screen" hidden>
+  <div class="login-card">
+    <h1>Pick AI History</h1>
+    <p class="login-hint">Enter your access key to continue.</p>
+    <input id="loginKey" type="password" placeholder="Access key" autocomplete="off" />
+    <button id="loginSubmit" class="login-submit">Continue</button>
+    <p id="loginError" class="login-error" hidden>Wrong key — try again.</p>
   </div>
-</header>
-<main id="grid" class="grid"></main>
-<p id="empty" class="empty" hidden>No entries yet.</p>
-<div id="errorState" class="empty" hidden>
-  Couldn't load history. <button id="retryBtn" class="load-more">Retry</button>
 </div>
-<button id="loadMore" class="load-more" hidden>Load more</button>
 
-<div id="modal" class="modal" hidden>
-  <div class="modal-content">
-    <button id="modalClose" class="modal-close">&times;</button>
-    <img id="modalImage" class="modal-image" hidden />
-    <p id="modalMeta" class="modal-meta"></p>
-    <h2 id="modalQuestion"></h2>
-    <p id="modalAnswer" class="modal-answer"></p>
+<div id="appContent" hidden>
+  <header>
+    <h1>Pick AI History</h1>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search questions and answers…" />
+      <div class="filters">
+        <button class="filter-btn active" data-mode="">All</button>
+        <button class="filter-btn" data-mode="answer">Answer</button>
+        <button class="filter-btn" data-mode="explain">Explain</button>
+      </div>
+    </div>
+  </header>
+  <main id="grid" class="grid"></main>
+  <p id="empty" class="empty" hidden>No entries yet.</p>
+  <div id="errorState" class="empty" hidden>
+    Couldn't load history. <button id="retryBtn" class="load-more">Retry</button>
+  </div>
+  <button id="loadMore" class="load-more" hidden>Load more</button>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-content">
+      <button id="modalClose" class="modal-close">&times;</button>
+      <img id="modalImage" class="modal-image" hidden />
+      <p id="modalMeta" class="modal-meta"></p>
+      <h2 id="modalQuestion"></h2>
+      <p id="modalAnswer" class="modal-answer"></p>
+    </div>
   </div>
 </div>
 

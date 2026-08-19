@@ -1,3 +1,12 @@
+const API_BASE = "https://pick-ai-history.byeongminchoi12.workers.dev";
+const STORAGE_KEY = "historyAccessKey";
+
+const loginScreen = document.getElementById("loginScreen");
+const loginKeyInput = document.getElementById("loginKey");
+const loginSubmit = document.getElementById("loginSubmit");
+const loginError = document.getElementById("loginError");
+const appContent = document.getElementById("appContent");
+
 const grid = document.getElementById("grid");
 const emptyEl = document.getElementById("empty");
 const errorEl = document.getElementById("errorState");
@@ -22,6 +31,64 @@ let currentQuery = "";
 let lastId;
 let debounceTimer = null;
 
+function accessKey() {
+  return localStorage.getItem(STORAGE_KEY);
+}
+
+function apiFetch(path) {
+  return fetch(`${API_BASE}${path}`, {
+    headers: { "X-History-Key": accessKey() ?? "" },
+  });
+}
+
+function showLogin(message) {
+  appContent.hidden = true;
+  loginScreen.hidden = false;
+  loginError.hidden = !message;
+  if (message) loginError.textContent = message;
+}
+
+function showApp() {
+  loginScreen.hidden = true;
+  appContent.hidden = false;
+}
+
+async function trySavedKeyOrShowLogin() {
+  if (!accessKey()) {
+    showLogin();
+    return;
+  }
+  // Verify the stored key still works before committing to showing the app —
+  // an old/revoked key should bounce back to the login screen, not a blank app.
+  const res = await apiFetch("/api/history?limit=1");
+  if (res.status === 401) {
+    localStorage.removeItem(STORAGE_KEY);
+    showLogin("Saved key no longer works — enter it again.");
+    return;
+  }
+  showApp();
+  loadEntries(true);
+}
+
+loginSubmit.addEventListener("click", async () => {
+  const key = loginKeyInput.value.trim();
+  if (!key) return;
+  localStorage.setItem(STORAGE_KEY, key);
+  const res = await apiFetch("/api/history?limit=1");
+  if (res.status === 401) {
+    localStorage.removeItem(STORAGE_KEY);
+    loginError.hidden = false;
+    loginError.textContent = "Wrong key — try again.";
+    return;
+  }
+  showApp();
+  loadEntries(true);
+});
+
+loginKeyInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") loginSubmit.click();
+});
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
@@ -36,7 +103,7 @@ function renderCard(entry) {
   const card = document.createElement("div");
   card.className = "card";
   card.innerHTML = `
-    ${entry.image_key ? `<img src="/api/image/${encodeURIComponent(entry.image_key)}" loading="lazy" />` : ""}
+    ${entry.image_key ? `<img loading="lazy" />` : ""}
     <div class="card-meta">
       <span class="badge ${entry.mode}">${entry.mode}</span>
       <span>${formatTime(entry.created_at)}</span>
@@ -45,16 +112,31 @@ function renderCard(entry) {
     <p class="card-answer">${escapeHtml(entry.answer)}</p>
   `;
   const img = card.querySelector("img");
-  if (img) img.addEventListener("error", () => { img.src = IMAGE_FALLBACK; }, { once: true });
+  if (img) {
+    img.addEventListener("error", () => { img.src = IMAGE_FALLBACK; }, { once: true });
+    loadAuthedImage(entry.image_key).then((url) => { img.src = url; });
+  }
   card.addEventListener("click", () => openModal(entry));
   return card;
+}
+
+// Images need the access-key header too (same auth as /api/history), so a plain
+// <img src> can't be used directly — fetch with the header and swap in a blob URL.
+async function loadAuthedImage(key) {
+  try {
+    const res = await apiFetch(`/api/image/${encodeURIComponent(key)}`);
+    if (!res.ok) return IMAGE_FALLBACK;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return IMAGE_FALLBACK;
+  }
 }
 
 function openModal(entry) {
   modalImage.hidden = !entry.image_key;
   if (entry.image_key) {
-    modalImage.src = `/api/image/${encodeURIComponent(entry.image_key)}`;
-    modalImage.addEventListener("error", () => { modalImage.src = IMAGE_FALLBACK; }, { once: true });
+    loadAuthedImage(entry.image_key).then((url) => { modalImage.src = url; });
   }
   modalMeta.textContent = `${entry.mode} · ${formatTime(entry.created_at)}`;
   modalQuestion.textContent = entry.question || "(screenshot)";
@@ -81,7 +163,12 @@ async function loadEntries(reset) {
 
   let rows;
   try {
-    const res = await fetch(`/api/history?${params.toString()}`);
+    const res = await apiFetch(`/api/history?${params.toString()}`);
+    if (res.status === 401) {
+      localStorage.removeItem(STORAGE_KEY);
+      showLogin("Session expired — enter your key again.");
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     rows = await res.json();
   } catch (err) {
@@ -129,4 +216,4 @@ filterBtns.forEach((btn) => {
 
 loadMoreBtn.addEventListener("click", () => loadEntries(false));
 
-loadEntries(true);
+trySavedKeyOrShowLogin();
