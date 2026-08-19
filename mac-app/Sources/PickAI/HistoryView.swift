@@ -124,22 +124,40 @@ struct HistoryRootView: View {
 
     private func signInWithGoogle() {
         loginError = nil
-        guard let clientID = FirebaseApp.app()?.options.clientID else { return }
-        guard let window = NSApplication.shared.keyWindow else { return }
+        guard let clientID = FirebaseApp.app()?.options.clientID else {
+            NSLog("[PickAI] Google sign-in: no FirebaseApp clientID available")
+            loginError = "Google sign-in failed — try again."
+            return
+        }
+        guard let window = NSApplication.shared.keyWindow else {
+            NSLog("[PickAI] Google sign-in: no key window to present from")
+            loginError = "Google sign-in failed — try again."
+            return
+        }
 
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.signIn(withPresenting: window) { result, error in
-            guard error == nil, let result else {
+            if let error {
+                NSLog("[PickAI] Google sign-in: GIDSignIn error: \(error)")
+                loginError = "Google sign-in failed — try again."
+                return
+            }
+            guard let result else {
+                NSLog("[PickAI] Google sign-in: GIDSignIn returned no result and no error")
                 loginError = "Google sign-in failed — try again."
                 return
             }
             guard let idToken = result.user.idToken?.tokenString else {
+                NSLog("[PickAI] Google sign-in: GIDSignIn result had no ID token")
                 loginError = "Google sign-in failed — try again."
                 return
             }
             let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: result.user.accessToken.tokenString)
             Auth.auth().signIn(with: credential) { _, error in
-                if error != nil { loginError = "Google sign-in failed — try again." }
+                if let error {
+                    NSLog("[PickAI] Google sign-in: Firebase signIn(with:) error: \(error)")
+                    loginError = "Google sign-in failed — try again."
+                }
             }
         }
     }
