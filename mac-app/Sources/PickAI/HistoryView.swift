@@ -114,9 +114,14 @@ struct HistoryRootView: View {
         loginError = nil
         defer { isSubmitting = false }
         do {
-            _ = try await Auth.auth().signIn(withEmail: email, password: password)
+            _ = try await Auth.auth().signIn(
+                withEmail: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                password: password
+            )
         } catch {
-            loginError = "Wrong email or password."
+            NSLog("[PickAI] native sign-in error: \(error)")
+            let nsError = error as NSError
+            loginError = "Sign-in failed: \(nsError.localizedDescription) (code \(nsError.code))"
         }
     }
 
