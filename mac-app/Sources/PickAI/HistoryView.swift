@@ -151,6 +151,11 @@ struct HistoryListView: View {
     @State private var selectedEntry: HistoryEntry?
     @State private var searchTask: Task<Void, Never>?
     @State private var latestKnownId: Int?
+    @State private var selectMode = false
+    @State private var selectedIds: Set<Int> = []
+    @State private var showBulkDeleteConfirm = false
+    @State private var isBulkDeleting = false
+    @State private var bulkDeleteError: String?
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
 
@@ -216,9 +221,93 @@ struct HistoryListView: View {
                 }
                 .frame(width: 140)
                 .onChange(of: order) { _ in Task { await load(reset: true) } }
+
+                Button(selectMode ? "Done" : "Select") { toggleSelectMode() }
+                    .buttonStyle(.bordered)
+            }
+            if selectMode {
+                selectBar
             }
         }
         .padding(16)
+    }
+
+    @ViewBuilder
+    private var selectBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text("\(selectedIds.count) selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if showBulkDeleteConfirm {
+                    Text("Delete \(selectedIds.count) item\(selectedIds.count == 1 ? "" : "s")?")
+                        .font(.caption)
+                    Button("Cancel") { showBulkDeleteConfirm = false }
+                    Button("Delete", role: .destructive) { Task { await performBulkDelete() } }
+                        .disabled(isBulkDeleting)
+                } else {
+                    Button("Select All") { selectedIds = Set(entries.map(\.id)) }
+                    Button("Delete Selected", role: .destructive) { showBulkDeleteConfirm = true }
+                        .disabled(selectedIds.isEmpty)
+                    Button("Cancel") { toggleSelectMode() }
+                }
+            }
+            if let bulkDeleteError {
+                Text(bulkDeleteError).font(.caption).foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func toggleSelectMode() {
+        selectMode.toggle()
+        selectedIds.removeAll()
+        showBulkDeleteConfirm = false
+        bulkDeleteError = nil
+    }
+
+    private func exitSelectMode() {
+        selectMode = false
+        selectedIds.removeAll()
+        showBulkDeleteConfirm = false
+        bulkDeleteError = nil
+    }
+
+    /// Deletes all selected entries concurrently against the existing single-item DELETE
+    /// endpoint — selections are personal-scale, so a dedicated batch endpoint isn't worth it.
+    private func performBulkDelete() async {
+        isBulkDeleting = true
+        bulkDeleteError = nil
+        defer { isBulkDeleting = false }
+        let ids = Array(selectedIds)
+        var failedCount = 0
+        await withTaskGroup(of: (Int, Bool).self) { group in
+            for id in ids {
+                group.addTask {
+                    do {
+                        try await HistoryAPIClient.deleteEntry(id: id)
+                        return (id, true)
+                    } catch {
+                        return (id, false)
+                    }
+                }
+            }
+            for await (id, ok) in group {
+                if ok {
+                    entries.removeAll { $0.id == id }
+                    selectedIds.remove(id)
+                } else {
+                    failedCount += 1
+                }
+            }
+        }
+        if failedCount > 0 {
+            bulkDeleteError = "Couldn't delete \(failedCount) item(s) — try again."
+            showBulkDeleteConfirm = false
+        } else {
+            selectMode = false
+            showBulkDeleteConfirm = false
+        }
     }
 
     @ViewBuilder
@@ -237,8 +326,22 @@ struct HistoryListView: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(entries) { entry in
-                        HistoryCardView(entry: entry)
-                            .onTapGesture { selectedEntry = entry }
+                        HistoryCardView(
+                            entry: entry,
+                            isSelectMode: selectMode,
+                            isSelected: selectedIds.contains(entry.id)
+                        )
+                        .onTapGesture {
+                            if selectMode {
+                                if selectedIds.contains(entry.id) {
+                                    selectedIds.remove(entry.id)
+                                } else {
+                                    selectedIds.insert(entry.id)
+                                }
+                            } else {
+                                selectedEntry = entry
+                            }
+                        }
                     }
                 }
                 .padding(16)
@@ -263,6 +366,7 @@ struct HistoryListView: View {
         errorMessage = nil
         isLoading = true
         defer { isLoading = false }
+        if reset { exitSelectMode() }
         let cursorId = reset ? nil : entries.last?.id
         do {
             let rows = try await HistoryAPIClient.fetchHistory(
@@ -307,6 +411,8 @@ struct HistoryListView: View {
 
 struct HistoryCardView: View {
     let entry: HistoryEntry
+    var isSelectMode: Bool = false
+    var isSelected: Bool = false
     @State private var image: NSImage?
 
     var body: some View {
@@ -347,6 +453,20 @@ struct HistoryCardView: View {
         .padding(12)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 14).stroke(Color.pickAccent, lineWidth: 2)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if isSelectMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? Color.pickAccent : Color.secondary)
+                    .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
+                    .padding(6)
+            }
+        }
         .task { await loadImage() }
     }
 
