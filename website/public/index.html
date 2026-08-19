@@ -60,8 +60,22 @@
         <option value="desc">Newest first</option>
         <option value="asc">Oldest first</option>
       </select>
+      <button id="selectToggleBtn" class="select-toggle-btn">Select</button>
     </div>
   </header>
+  <div id="selectBar" class="select-bar" hidden>
+    <span id="selectCount">0 selected</span>
+    <div id="selectBarActions" class="select-bar-group">
+      <button id="selectAllBtn" class="delete-cancel">Select All</button>
+      <button id="selectDeleteBtn" class="delete-btn" disabled>Delete Selected</button>
+      <button id="selectCancelBtn" class="delete-cancel">Cancel</button>
+    </div>
+    <div id="selectBarConfirm" class="select-bar-group" hidden>
+      <span id="selectConfirmText"></span>
+      <button id="selectDeleteCancelBtn" class="delete-cancel">Cancel</button>
+      <button id="selectDeleteConfirmBtn" class="delete-confirm-btn">Delete</button>
+    </div>
+  </div>
   <main id="grid" class="grid"></main>
   <p id="empty" class="empty" hidden>No entries yet.</p>
   <div id="errorState" class="empty" hidden>

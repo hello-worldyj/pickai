@@ -81,6 +81,7 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 }
 
 .card {
+  position: relative;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -93,6 +94,18 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 }
 
 .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+
+.card.selected { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.card-checkbox {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 20px;
+  height: 20px;
+  z-index: 2;
+  cursor: pointer;
+}
 
 .card img { width: 100%; border-radius: 8px; object-fit: cover; max-height: 160px; }
 
@@ -320,6 +333,30 @@ h1 { font-size: 22px; margin: 0 0 16px; }
   font-size: 13px;
   cursor: pointer;
 }
+
+.select-toggle-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.select-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 32px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.select-bar-group { display: flex; align-items: center; gap: 10px; }
 
 .modal-footer {
   margin-top: 20px;

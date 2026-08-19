@@ -61,6 +61,18 @@ const modalDeleteConfirm = document.getElementById("modalDeleteConfirm");
 const modalDeleteCancel = document.getElementById("modalDeleteCancel");
 const modalDeleteConfirmBtn = document.getElementById("modalDeleteConfirmBtn");
 
+const selectToggleBtn = document.getElementById("selectToggleBtn");
+const selectBar = document.getElementById("selectBar");
+const selectCount = document.getElementById("selectCount");
+const selectBarActions = document.getElementById("selectBarActions");
+const selectBarConfirm = document.getElementById("selectBarConfirm");
+const selectConfirmText = document.getElementById("selectConfirmText");
+const selectAllBtn = document.getElementById("selectAllBtn");
+const selectDeleteBtn = document.getElementById("selectDeleteBtn");
+const selectCancelBtn = document.getElementById("selectCancelBtn");
+const selectDeleteCancelBtn = document.getElementById("selectDeleteCancelBtn");
+const selectDeleteConfirmBtn = document.getElementById("selectDeleteConfirmBtn");
+
 // Inline "broken image" placeholder (small gray square) — used instead of the
 // browser's default broken-image icon when a screenshot fails to load.
 const IMAGE_FALLBACK =
@@ -72,6 +84,8 @@ let currentOrder = "desc";
 let lastId;
 let debounceTimer = null;
 let activeEntryId = null;
+let selectMode = false;
+const selectedIds = new Set();
 
 // Every API call fetches the current ID token fresh — the Firebase SDK transparently
 // refreshes it under the hood when it's close to expiring, so this never uses a stale token.
@@ -184,6 +198,7 @@ function renderCard(entry) {
   card.className = "card";
   card.dataset.id = String(entry.id);
   card.innerHTML = `
+    <input type="checkbox" class="card-checkbox" ${selectMode ? "" : "hidden"} />
     ${entry.image_key ? `<img loading="lazy" />` : ""}
     <div class="card-meta">
       <span class="badge ${entry.mode}">${entry.mode}</span>
@@ -197,7 +212,17 @@ function renderCard(entry) {
     img.addEventListener("error", () => { img.src = IMAGE_FALLBACK; }, { once: true });
     loadAuthedImage(entry.image_key).then((url) => { img.src = url; });
   }
-  card.addEventListener("click", () => openModal(entry));
+  const checkbox = card.querySelector(".card-checkbox");
+  checkbox.addEventListener("click", (e) => e.stopPropagation());
+  checkbox.addEventListener("change", () => toggleSelect(entry.id, checkbox.checked));
+  card.addEventListener("click", () => {
+    if (selectMode) {
+      checkbox.checked = !checkbox.checked;
+      toggleSelect(entry.id, checkbox.checked);
+    } else {
+      openModal(entry);
+    }
+  });
   return card;
 }
 
@@ -266,12 +291,97 @@ modalDeleteConfirmBtn.addEventListener("click", async () => {
   }
 });
 
+function toggleSelect(id, isSelected) {
+  if (isSelected) selectedIds.add(id);
+  else selectedIds.delete(id);
+  const card = grid.querySelector(`.card[data-id="${id}"]`);
+  if (card) card.classList.toggle("selected", isSelected);
+  selectCount.textContent = `${selectedIds.size} selected`;
+  selectDeleteBtn.disabled = selectedIds.size === 0;
+}
+
+function setSelectMode(on) {
+  selectMode = on;
+  selectBar.hidden = !on;
+  selectBarActions.hidden = false;
+  selectBarConfirm.hidden = true;
+  selectedIds.clear();
+  grid.querySelectorAll(".card").forEach((card) => {
+    card.classList.remove("selected");
+    const cb = card.querySelector(".card-checkbox");
+    if (cb) {
+      cb.checked = false;
+      cb.hidden = !on;
+    }
+  });
+  selectCount.textContent = "0 selected";
+  selectDeleteBtn.disabled = true;
+}
+
+selectToggleBtn.addEventListener("click", () => setSelectMode(true));
+selectCancelBtn.addEventListener("click", () => setSelectMode(false));
+
+selectAllBtn.addEventListener("click", () => {
+  grid.querySelectorAll(".card").forEach((card) => {
+    const id = Number(card.dataset.id);
+    const cb = card.querySelector(".card-checkbox");
+    cb.checked = true;
+    card.classList.add("selected");
+    selectedIds.add(id);
+  });
+  selectCount.textContent = `${selectedIds.size} selected`;
+  selectDeleteBtn.disabled = selectedIds.size === 0;
+});
+
+selectDeleteBtn.addEventListener("click", () => {
+  if (selectedIds.size === 0) return;
+  selectBarActions.hidden = true;
+  selectBarConfirm.hidden = false;
+  selectConfirmText.textContent = `Delete ${selectedIds.size} item${selectedIds.size === 1 ? "" : "s"}?`;
+});
+
+selectDeleteCancelBtn.addEventListener("click", () => {
+  selectBarConfirm.hidden = true;
+  selectBarActions.hidden = false;
+});
+
+selectDeleteConfirmBtn.addEventListener("click", async () => {
+  selectDeleteConfirmBtn.disabled = true;
+  const ids = [...selectedIds];
+  const results = await Promise.allSettled(
+    ids.map((id) => apiFetch(`/api/history/${id}`, { method: "DELETE" }))
+  );
+  let failedCount = 0;
+  results.forEach((result, i) => {
+    const ok = result.status === "fulfilled" && result.value.ok;
+    if (ok) {
+      const card = grid.querySelector(`.card[data-id="${ids[i]}"]`);
+      if (card) card.remove();
+      selectedIds.delete(ids[i]);
+    } else {
+      failedCount += 1;
+    }
+  });
+  selectDeleteConfirmBtn.disabled = false;
+  if (failedCount > 0) {
+    alert(`Couldn't delete ${failedCount} item(s) — try again.`);
+    selectBarConfirm.hidden = true;
+    selectBarActions.hidden = false;
+    selectCount.textContent = `${selectedIds.size} selected`;
+    selectDeleteBtn.disabled = selectedIds.size === 0;
+  } else {
+    setSelectMode(false);
+    if (!grid.children.length) emptyEl.hidden = false;
+  }
+});
+
 let latestKnownId;
 
 async function loadEntries(reset) {
   if (reset) {
     grid.innerHTML = "";
     lastId = undefined;
+    setSelectMode(false);
   }
   errorEl.hidden = true;
 
