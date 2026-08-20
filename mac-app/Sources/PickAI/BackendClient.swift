@@ -50,9 +50,21 @@ enum BackendClient {
     static func query(messages: [ChatMessage], mode: QueryMode) async throws -> String {
         do {
             return try await attemptQuery(messages: messages, mode: mode)
-        } catch is URLError {
-            // Transient connection drops (e.g. a flaky VPN tunnel) are common enough on this
-            // machine to be worth one silent retry before surfacing an error to the user.
+        } catch let error {
+            let isTransient: Bool
+            switch error {
+            case is URLError:
+                // Flaky connection drops (e.g. a VPN tunnel hiccup) are common enough on this
+                // machine to be worth one silent retry before surfacing an error to the user.
+                isTransient = true
+            case BackendError.http(let statusCode) where statusCode >= 500:
+                // A 5xx means Cloudflare/OpenAI had a momentary problem, not that the request
+                // itself was bad — worth one retry before bothering the user with it.
+                isTransient = true
+            default:
+                isTransient = false
+            }
+            guard isTransient else { throw error }
             try await Task.sleep(nanoseconds: 800_000_000)
             return try await attemptQuery(messages: messages, mode: mode)
         }
