@@ -22,9 +22,9 @@ final class HistoryWindowController: NSObject, NSWindowDelegate {
         newWindow.setContentSize(NSSize(width: 720, height: 560))
         newWindow.center()
         newWindow.delegate = self
-        // sharingType = .none breaks window compositing over some apps (see OverlayPanel.swift) —
-        // stays off for reliable visibility.
-        // newWindow.sharingType = .none
+        // Excludes this window from screenshots, screen recordings, and screen shares —
+        // it's still visible on-screen. See OverlayPanel.swift for why this was re-enabled.
+        newWindow.sharingType = .none
         window = newWindow
 
         NSApp.activate(ignoringOtherApps: true)
