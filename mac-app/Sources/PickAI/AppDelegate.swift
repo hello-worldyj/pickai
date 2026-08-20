@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var selectionMonitor: SelectionMonitor?
     private var screenshotHotkeyMonitor: HotkeyMonitor?
+    private var screenshotHotkeyMonitorAlt: HotkeyMonitor?
     private var selectionHotkeyMonitor: HotkeyMonitor?
     private var healthTimer: Timer?
     private let overlay = OverlayController()
@@ -21,16 +22,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkAccessibilityPermission()
         ScreenshotCapture.requestPermissionIfNeeded()
 
-        let monitor = SelectionMonitor { [weak self] text, location in
-            self?.overlay.show(text: text, at: location)
-        }
+        let monitor = SelectionMonitor(
+            onSelection: { [weak self] text, location in
+                self?.overlay.show(text: text, at: location)
+            },
+            // No text was actually selected when fn+Q was pressed — fall back to a screenshot
+            // around the cursor instead of silently doing nothing, since that's what people
+            // expect from a "just show me the popup" hotkey.
+            onNoSelection: { [weak self] location in
+                self?.captureAndSolve(at: location)
+            }
+        )
         selectionMonitor = monitor
 
-        let screenshotHotkey = HotkeyMonitor(keyCode: 0x01, flags: [.control, .option, .command]) { [weak self] in
-            self?.captureAndSolve()
+        // Both combos are bound to the same action — there's real confusion about which one is
+        // "the" screenshot shortcut, so support both instead of relying on remembering one.
+        let screenshotHotkey = HotkeyMonitor(keyCode: 0x01, flags: [.command, .shift]) { [weak self] in
+            self?.captureAndSolve(at: NSEvent.mouseLocation)
         }
         screenshotHotkey.start()
         screenshotHotkeyMonitor = screenshotHotkey
+
+        let screenshotHotkeyAlt = HotkeyMonitor(keyCode: 0x01, flags: [.control, .option, .command]) { [weak self] in
+            self?.captureAndSolve(at: NSEvent.mouseLocation)
+        }
+        screenshotHotkeyAlt.start()
+        screenshotHotkeyMonitorAlt = screenshotHotkeyAlt
 
         // fn+Q: capture whatever text is currently selected and show the popup.
         let selectionHotkey = HotkeyMonitor(keyCode: 0x0C, flags: [.function]) { [weak self] in
@@ -52,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isFullyWorking: Bool {
         AXIsProcessTrusted()
             && (screenshotHotkeyMonitor?.isActive ?? false)
+            && (screenshotHotkeyMonitorAlt?.isActive ?? false)
             && (selectionHotkeyMonitor?.isActive ?? false)
     }
 
@@ -63,8 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : "Pick AI — not working. Check Accessibility permission (menu ▸ Open Accessibility Settings…)."
     }
 
-    private func captureAndSolve() {
-        let location = NSEvent.mouseLocation
+    private func captureAndSolve(at location: NSPoint) {
         // Both CGEventTaps live on the main run loop, so any slow synchronous work here
         // (CGDisplayCreateImage + PNG encoding of a full Retina display can take a while
         // under load) risks blocking it past macOS's watchdog threshold — which disables
@@ -108,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func wakeUpHere() {
-        captureAndSolve()
+        captureAndSolve(at: NSEvent.mouseLocation)
     }
 
     @objc private func openHistoryWindow() {

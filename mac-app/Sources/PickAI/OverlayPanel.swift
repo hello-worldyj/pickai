@@ -14,9 +14,11 @@ private final class OverlayPanel: NSPanel {
         hasShadow = true
         level = .popUpMenu
         // sharingType = .none (excludes this window from screenshots/screen recordings) breaks
-        // window compositing over some apps (confirmed with Chrome) — the panel renders behind
-        // the frontmost app's window instead of on top of it. Reliable visibility matters more
-        // than screenshot-invisibility, so this stays off.
+        // window compositing over some apps (confirmed with Chrome via live NSLog diagnosis) —
+        // the panel renders behind the frontmost app's window instead of on top of it. Pairing
+        // it with orderFrontRegardless() does NOT fix this — it's a compositor-level exclusion,
+        // not a z-order problem. Reliable visibility matters more than screenshot-invisibility,
+        // so this stays off. Do not re-enable without confirming on a real Chrome window first.
         // sharingType = .none
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
@@ -61,6 +63,7 @@ final class OverlayController: NSObject {
         setState(.choosing)
         position(at: screenPoint)
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         installDismissMonitors()
         logVisibility(trigger: "text", at: screenPoint)
     }
@@ -71,6 +74,7 @@ final class OverlayController: NSObject {
         setState(.choosing)
         position(at: screenPoint)
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         installDismissMonitors()
         logVisibility(trigger: "screenshot", at: screenPoint)
     }

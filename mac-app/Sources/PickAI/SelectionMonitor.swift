@@ -2,13 +2,15 @@ import AppKit
 
 final class SelectionMonitor {
     private let onSelection: (String, NSPoint) -> Void
+    private let onNoSelection: (NSPoint) -> Void
 
     private let pollInterval: TimeInterval = 0.05
     private let maxPollAttempts = 6
     private let maxTextLength = 8000
 
-    init(onSelection: @escaping (String, NSPoint) -> Void) {
+    init(onSelection: @escaping (String, NSPoint) -> Void, onNoSelection: @escaping (NSPoint) -> Void) {
         self.onSelection = onSelection
+        self.onNoSelection = onNoSelection
     }
 
     /// Copies whatever is currently selected in the frontmost app and shows the popup.
@@ -36,11 +38,16 @@ final class SelectionMonitor {
 
             if let capturedText, !capturedText.isEmpty {
                 onSelection(String(capturedText.prefix(maxTextLength)), location)
+            } else {
+                onNoSelection(location)
             }
             return
         }
 
-        guard attempt < maxPollAttempts else { return }
+        guard attempt < maxPollAttempts else {
+            onNoSelection(location)
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval) { [weak self] in
             self?.pollForChange(previousChangeCount: previousChangeCount, savedItems: savedItems, location: location, attempt: attempt + 1)
         }
