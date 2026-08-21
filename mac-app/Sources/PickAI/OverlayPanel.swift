@@ -13,15 +13,12 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        // Excludes this window from screenshots, screen recordings, and screen shares
-        // (e.g. Cmd+Shift+4, QuickTime, Zoom/Meet screen share) — it's still visible on-screen.
-        // sharingType is a capture-exclusion flag, not a z-order/compositing property, so it
-        // should not affect whether the panel renders above Chrome. The earlier "shows behind
-        // Chrome" reports lined up with the wrong-hotkey and empty-selection bugs (now fixed) —
-        // re-enabled on that basis. If the panel is confirmed rendering behind another app's
-        // window with the correct hotkey and an actual selection, that's a distinct bug (not
-        // this line) — investigate with logVisibility() below before disabling this again.
-        sharingType = .none
+        // sharingType = .none (excludes this window from screenshots/screen recordings) reliably
+        // breaks on-screen visibility on this machine — confirmed twice now, over Chrome and
+        // over other apps too, independent of the hotkey/selection bugs that were also present.
+        // Theoretically sharingType shouldn't affect compositing, but empirically it does here.
+        // Leave this OFF. Don't re-enable without the user actively testing it live first.
+        // sharingType = .none
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
