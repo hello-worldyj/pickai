@@ -60,6 +60,19 @@ type ChatContent =
   | string
   | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
 
+// Uint8Array.from(str, c => c.charCodeAt(0)) dispatches a callback per character, which is
+// slow enough on a multi-MB base64 string (a full-res screenshot) to blow the Worker's CPU
+// time limit on its own. A preallocated array + plain indexed loop is JIT-friendly and avoids
+// that per-element call overhead.
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 function toChatContent(message: Message): ChatContent {
   if (message.imageBase64) {
     return [
@@ -137,8 +150,7 @@ export default {
       (async () => {
         try {
           if (imageKey && lastMessage.imageBase64) {
-            const bytes = Uint8Array.from(atob(lastMessage.imageBase64), (c) => c.charCodeAt(0));
-            await uploadToB2(env, imageKey, bytes, "image/png");
+            await uploadToB2(env, imageKey, base64ToBytes(lastMessage.imageBase64), "image/png");
           }
           await recordHistory(env, {
             mode: body.mode,
