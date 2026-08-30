@@ -11,33 +11,65 @@ export interface Env {
   B2_BUCKET: string;
   B2_ENDPOINT: string;
   GITHUB_TOKEN: string;
+  CF_VERSION_METADATA: { id: string };
 }
 
 const ISSUE_REPO = "hello-worldyj/pick_ai";
+
+function githubHeaders(env: Env): Record<string, string> {
+  return {
+    Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    "Content-Type": "application/json",
+    "User-Agent": "pick-ai-backend",
+    Accept: "application/vnd.github+json",
+  };
+}
 
 // Files a GitHub issue for a genuine unexpected exception, so it gets picked up and fixed
 // without anyone having to notice and report it first. Deliberately narrow: expected error
 // paths (bad request, auth, OpenAI being down) return their own status codes above this and
 // never reach here — only real bugs in this code should file an issue. Can't catch a Worker
-// killed outright for exceeding its CPU/memory limits (execution halts before this runs).
+// killed outright for exceeding its CPU/memory limits (execution halts before this runs) —
+// that shows up as no issue at all, not one filed by this function.
 async function reportErrorToGitHub(env: Env, error: unknown, context: Record<string, unknown>): Promise<void> {
   if (!env.GITHUB_TOKEN) return;
   const message = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
+  const title = `[auto] Backend error: ${message.slice(0, 100)}`;
+  const versionId = env.CF_VERSION_METADATA?.id ?? "unknown";
+
   try {
+    // A repeatedly-triggering bug shouldn't file a new issue (and fire a new routine run) on
+    // every single request — that's issue-spam and wasted routine invocations for one root
+    // cause. Bump an occurrence count on the existing open issue instead, if there is one.
+    const existing = await fetch(
+      `https://api.github.com/repos/${ISSUE_REPO}/issues?state=open&labels=auto-filed&per_page=50`,
+      { headers: githubHeaders(env) }
+    );
+    if (existing.ok) {
+      const issues = await existing.json<{ number: number; title: string }[]>();
+      const match = issues.find((i) => i.title === title);
+      if (match) {
+        await fetch(`https://api.github.com/repos/${ISSUE_REPO}/issues/${match.number}/comments`, {
+          method: "POST",
+          headers: githubHeaders(env),
+          body: JSON.stringify({
+            body: `Occurred again at ${new Date().toISOString()} (worker version \`${versionId}\`). Context: \`${JSON.stringify(context)}\`.`,
+          }),
+        });
+        return;
+      }
+    }
+
     await fetch(`https://api.github.com/repos/${ISSUE_REPO}/issues`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-        "Content-Type": "application/json",
-        "User-Agent": "pick-ai-backend",
-        Accept: "application/vnd.github+json",
-      },
+      headers: githubHeaders(env),
       body: JSON.stringify({
-        title: `[auto] Backend error: ${message.slice(0, 100)}`,
+        title,
         body:
           `**Message:** ${message}\n\n` +
           `**Context:** \`${JSON.stringify(context)}\`\n\n` +
+          `**Worker version:** \`${versionId}\`\n\n` +
           `**Time:** ${new Date().toISOString()}\n\n` +
           (stack ? `**Stack:**\n\`\`\`\n${stack}\n\`\`\`` : ""),
         labels: ["auto-filed", "backend"],
@@ -76,7 +108,7 @@ const IMAGE_INSTRUCTION =
 const MAX_TEXT_LENGTH = 8000;
 const MAX_MESSAGES = 20;
 
-function isMessage(value: unknown): value is Message {
+export function isMessage(value: unknown): value is Message {
   if (typeof value !== "object" || value === null) return false;
   const m = value as Record<string, unknown>;
   if (m.role !== "user" && m.role !== "assistant") return false;
@@ -85,7 +117,7 @@ function isMessage(value: unknown): value is Message {
   return hasText || hasImage;
 }
 
-function isQueryRequest(body: unknown): body is QueryRequest {
+export function isQueryRequest(body: unknown): body is QueryRequest {
   if (typeof body !== "object" || body === null) return false;
   const b = body as Record<string, unknown>;
   if (b.mode !== "answer" && b.mode !== "explain") return false;
@@ -100,7 +132,7 @@ type ChatContent =
 // slow enough on a multi-MB base64 string (a full-res screenshot) to blow the Worker's CPU
 // time limit on its own. A preallocated array + plain indexed loop is JIT-friendly and avoids
 // that per-element call overhead.
-function base64ToBytes(base64: string): Uint8Array {
+export function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -109,7 +141,7 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-function toChatContent(message: Message): ChatContent {
+export function toChatContent(message: Message): ChatContent {
   if (message.imageBase64) {
     return [
       { type: "text", text: message.text || IMAGE_INSTRUCTION },
@@ -149,7 +181,15 @@ export default {
     try {
       return await handleQuery(body, env, ctx);
     } catch (error) {
-      ctx.waitUntil(reportErrorToGitHub(env, error, { mode: body.mode, messageCount: body.messages.length }));
+      const hasImage = body.messages.some((m) => !!m.imageBase64);
+      ctx.waitUntil(
+        reportErrorToGitHub(env, error, {
+          mode: body.mode,
+          messageCount: body.messages.length,
+          hasImage,
+          cfRay: request.headers.get("cf-ray") ?? undefined,
+        })
+      );
       console.error("unexpected error:", error);
       return new Response("Internal error", { status: 500 });
     }

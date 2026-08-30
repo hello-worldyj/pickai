@@ -11,3 +11,6 @@ B2_ENDPOINT = "s3.eu-central-003.backblazeb2.com"
 binding = "HISTORY_DB"
 database_name = "pickai-history"
 database_id = "f3fc87d5-5410-4b91-99e6-6c888580474b"
+
+[version_metadata]
+binding = "CF_VERSION_METADATA"

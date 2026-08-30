@@ -39,10 +39,19 @@ persists the exchange to D1 (metadata) + Backblaze B2 (the screenshot image).
 
 ## Deploy flow
 
-Push to `main` (paths under `backend/**`) auto-deploys via `.github/workflows/deploy-backend.yml`
-using the `CLOUDFLARE_API_TOKEN` GitHub secret. Never run `wrangler deploy` directly from an
-automated fix — just push and let the Action handle it, then verify with a live curl request
-after ~30s.
+Push to `main` (paths under `backend/**`) auto-deploys via `.github/workflows/deploy-backend.yml`,
+which runs `tsc --noEmit` and `vitest run` as a gate BEFORE `wrangler deploy` — a commit that
+fails either never reaches deploy. Never run `wrangler deploy` directly from an automated fix —
+just push and let the Action handle it, then verify with a live curl request after ~30s.
+
+## Tests
+
+`src/index.test.ts` covers the pure request-validation and encoding logic (`isMessage`,
+`isQueryRequest`, `base64ToBytes`, `toChatContent`) with `vitest`. Run `npm test` (or
+`npx vitest run`) from `backend/` before pushing a fix — this is a real regression gate, not
+just documentation, and CI will reject a push that fails it. If your fix touches any of these
+functions, update or add a test for the specific case that was broken — that's the whole point
+of the suite existing.
 
 ## Verifying a fix
 
