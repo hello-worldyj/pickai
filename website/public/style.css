@@ -1,0 +1,410 @@
+:root {
+  --bg: #f5f5f7;
+  --card-bg: #ffffff;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --border: #e5e5e7;
+  --accent: #0071e3;
+  --answer-badge: #34c759;
+  --explain-badge: #af52de;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --card-bg: #1c1c1e;
+    --text: #f5f5f7;
+    --text-secondary: #98989d;
+    --border: #38383a;
+    --accent: #0a84ff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* Without this, elements below whose classes set their own `display` (e.g.
+   .empty, .load-more) stay visible even when JS sets .hidden = true — an
+   author-stylesheet `display` rule beats the UA default [hidden] rule at
+   equal specificity. This keeps the hidden attribute authoritative. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 24px 32px 16px;
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+
+h1 { font-size: 22px; margin: 0 0 16px; }
+
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+#search {
+  flex: 1;
+  min-width: 240px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.filters { display: flex; gap: 6px; }
+
+.filter-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  padding: 24px 32px;
+}
+
+.card {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+
+.card.selected { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.card-checkbox {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 20px;
+  height: 20px;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.card img { width: 100%; border-radius: 8px; object-fit: cover; max-height: 160px; }
+
+.card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary); }
+
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; color: white; }
+.badge.answer { background: var(--answer-badge); }
+.badge.explain { background: var(--explain-badge); }
+
+.card-question {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card-answer {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.empty, .load-more { text-align: center; color: var(--text-secondary); margin: 40px auto; display: block; }
+
+.load-more {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.modal-image { width: 100%; border-radius: 10px; margin-bottom: 16px; }
+.modal-meta { font-size: 12px; color: var(--text-secondary); margin: 0 0 8px; }
+.modal-answer { white-space: pre-wrap; line-height: 1.5; }
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+/* Shown on top of appContent (unlike the standalone #loginScreen), so unlike .login-screen
+   this needs to actually overlay rather than sit in normal document flow. Above .modal's
+   z-index since it can be prompted right in the middle of using the app. */
+#passwordSetupModal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.login-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+}
+
+.login-card h1 { font-size: 20px; margin: 0 0 8px; }
+.login-hint { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
+
+.login-card input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.login-submit {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-error { color: #ff453a; font-size: 12px; margin: 12px 0 0; }
+
+.google-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.google-btn:hover { background: var(--card-bg); }
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin: 4px 0 16px;
+}
+
+.login-divider::before, .login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.login-divider span { padding: 0 10px; }
+
+.login-email-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.login-email-actions .login-submit { margin-bottom: 0; }
+
+.login-secondary {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.title-row h1 { margin: 0; }
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.signout-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sort-select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.select-toggle-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.select-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 32px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.select-bar-group { display: flex; align-items: center; gap: 10px; }
+
+.modal-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.delete-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #ff453a;
+  background: transparent;
+  color: #ff453a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-btn:hover { background: rgba(255, 69, 58, 0.1); }
+
+.delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.delete-cancel {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.delete-confirm-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #ff453a;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}

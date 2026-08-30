@@ -1,7 +1,15 @@
+import { uploadToB2 } from "./b2";
+import { recordHistory } from "./history";
+
 export interface Env {
   OPENAI_API_KEY: string;
   SHARED_SECRET: string;
   OPENAI_MODEL: string;
+  HISTORY_DB: D1Database;
+  B2_KEY_ID: string;
+  B2_APPLICATION_KEY: string;
+  B2_BUCKET: string;
+  B2_ENDPOINT: string;
 }
 
 type Mode = "answer" | "explain";
@@ -19,7 +27,10 @@ interface QueryRequest {
 }
 
 const SYSTEM_PROMPTS: Record<Mode, string> = {
-  answer: "Answer as directly and briefly as possible. No explanation, no preamble, just the answer. If the user asks a follow-up question, keep answering directly and briefly.",
+  answer:
+    "Give ONLY the final answer, nothing else. No restating the question, no work shown, no steps, no preamble, no LaTeX or math notation (no \\( \\), \\[ \\], $, or similar) — plain text only. " +
+    'For a math or computation question, respond in exactly this format: "The answer is: <result>". For any other question, respond with just the answer itself in one short line. ' +
+    "If the user asks a follow-up question, keep answering in this same terse style.",
   explain: "Give a clear, step-by-step explanation. Be thorough but concise. If the user asks a follow-up question, continue explaining in the same style.",
 };
 
@@ -49,6 +60,19 @@ type ChatContent =
   | string
   | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
 
+// Uint8Array.from(str, c => c.charCodeAt(0)) dispatches a callback per character, which is
+// slow enough on a multi-MB base64 string (a full-res screenshot) to blow the Worker's CPU
+// time limit on its own. A preallocated array + plain indexed loop is JIT-friendly and avoids
+// that per-element call overhead.
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 function toChatContent(message: Message): ChatContent {
   if (message.imageBase64) {
     return [
@@ -60,7 +84,7 @@ function toChatContent(message: Message): ChatContent {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname !== "/query" || request.method !== "POST") {
@@ -114,6 +138,31 @@ export default {
     }>();
 
     const result = data.choices[0]?.message?.content?.trim() ?? "";
+
+    // The most recent message is this turn's question — for the very first exchange
+    // of a session that's the screenshot/text that kicked it off; for a follow-up it's
+    // always text (the app never re-sends the original image on follow-ups), so this
+    // naturally uploads the screenshot exactly once per session, not on every turn.
+    const lastMessage = body.messages[body.messages.length - 1];
+    const imageKey = lastMessage.imageBase64 ? `${Date.now()}-${crypto.randomUUID()}.png` : null;
+
+    ctx.waitUntil(
+      (async () => {
+        try {
+          if (imageKey && lastMessage.imageBase64) {
+            await uploadToB2(env, imageKey, base64ToBytes(lastMessage.imageBase64), "image/png");
+          }
+          await recordHistory(env, {
+            mode: body.mode,
+            question: lastMessage.text ?? null,
+            answer: result,
+            imageKey,
+          });
+        } catch (err) {
+          console.error("history persistence failed:", err);
+        }
+      })()
+    );
 
     return new Response(JSON.stringify({ result }), {
       headers: { "Content-Type": "application/json" },
