@@ -4,7 +4,7 @@ import ApplicationServices
 private final class OverlayPanel: NSPanel {
     convenience init() {
         self.init(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 100),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 100),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -13,15 +13,24 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        // sharingType = .none (excludes this window from screenshots/screen recordings) reliably
-        // breaks on-screen visibility on this machine — confirmed twice now, over Chrome and
-        // over other apps too, independent of the hotkey/selection bugs that were also present.
-        // Theoretically sharingType shouldn't affect compositing, but empirically it does here.
-        // Leave this OFF. Don't re-enable without the user actively testing it live first.
-        // sharingType = .none
+        // Excludes this window from screenshots, screen recordings, and screen shares
+        // (e.g. Cmd+Shift+4, QuickTime, Zoom/Meet screen share) — it's still visible on-screen.
+        // The real cause of the earlier "doesn't show up" reports was diagnosed on 2026-08-23 as
+        // a collectionBehavior/Space-exclusion bug (see below), not this flag — sharingType was
+        // disabled and re-enabled several times chasing the wrong cause before that.
+        sharingType = .none
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        // .canJoinAllSpaces + .fullScreenAuxiliary is the combination Apple's docs suggest for
+        // "float over anything," but in practice it's unreliable: the window ends up excluded
+        // from whichever Space has a fullscreen app, which is the *default* exclusion behavior
+        // of plain .canJoinAllSpaces — confirmed live on 2026-08-23 (show() ran with
+        // isVisible=true while a fullscreen app was frontmost, but the panel only appeared once
+        // the user switched away to the desktop Space). Since this panel is shown fresh at a
+        // specific point and dismissed on the next click, it doesn't need to persist across
+        // Space switches — .moveToActiveSpace jumps it to whatever Space is active at the
+        // moment it's ordered front, and .fullScreenAuxiliary lets that include a fullscreen one.
+        collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     }
 
     override var canBecomeKey: Bool { true }
@@ -35,6 +44,7 @@ final class OverlayController: NSObject {
 
     private var conversation: [ChatMessage] = []
     private var activeMode: QueryMode = .answer
+    private var currentQuestionText: String?
 
     private let stack = NSStackView()
     private let previewLabel = NSTextField(wrappingLabelWithString: "")
@@ -48,7 +58,8 @@ final class OverlayController: NSObject {
     private let followUpField = NSTextField()
     private let askButton = NSButton(title: "Ask", target: nil, action: nil)
     private let footerRow = NSStackView()
-    private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
+    private let copyQuestionButton = NSButton(title: "Copy Question", target: nil, action: nil)
+    private let copyButton = NSButton(title: "Copy Answer", target: nil, action: nil)
     private let closeButton = NSButton(title: "Close", target: nil, action: nil)
 
     override init() {
@@ -58,6 +69,7 @@ final class OverlayController: NSObject {
 
     func show(text: String, at screenPoint: NSPoint) {
         conversation = [.user(text: text)]
+        currentQuestionText = text
         previewLabel.stringValue = String(text.prefix(140))
         setState(.choosing)
         position(at: screenPoint)
@@ -69,6 +81,7 @@ final class OverlayController: NSObject {
 
     func show(imagePNGData: Data, at screenPoint: NSPoint) {
         conversation = [.user(imagePNGData: imagePNGData)]
+        currentQuestionText = nil
         previewLabel.stringValue = "📷 Screenshot captured"
         setState(.choosing)
         position(at: screenPoint)
@@ -149,6 +162,7 @@ final class OverlayController: NSObject {
             footerRow.isHidden = false
             resultTextView.string = text
             followUpField.stringValue = ""
+            copyQuestionButton.isHidden = currentQuestionText == nil
         }
         panel.layoutIfNeeded()
         resizeToFitContent()
@@ -201,6 +215,10 @@ final class OverlayController: NSObject {
         resultScrollView.heightAnchor.constraint(lessThanOrEqualToConstant: 260).isActive = true
         resultScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 60).isActive = true
 
+        copyQuestionButton.target = self
+        copyQuestionButton.action = #selector(copyQuestionTapped)
+        copyQuestionButton.bezelStyle = .rounded
+
         copyButton.target = self
         copyButton.action = #selector(copyTapped)
         copyButton.bezelStyle = .rounded
@@ -210,7 +228,9 @@ final class OverlayController: NSObject {
         closeButton.bezelStyle = .rounded
 
         footerRow.orientation = .horizontal
+        footerRow.distribution = .fillEqually
         footerRow.spacing = 8
+        footerRow.addArrangedSubview(copyQuestionButton)
         footerRow.addArrangedSubview(copyButton)
         footerRow.addArrangedSubview(closeButton)
 
@@ -247,11 +267,11 @@ final class OverlayController: NSObject {
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14),
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-            previewLabel.widthAnchor.constraint(equalToConstant: 292),
-            buttonsRow.widthAnchor.constraint(equalToConstant: 292),
-            resultScrollView.widthAnchor.constraint(equalToConstant: 292),
-            followUpRow.widthAnchor.constraint(equalToConstant: 292),
-            footerRow.widthAnchor.constraint(equalToConstant: 292),
+            previewLabel.widthAnchor.constraint(equalToConstant: 352),
+            buttonsRow.widthAnchor.constraint(equalToConstant: 352),
+            resultScrollView.widthAnchor.constraint(equalToConstant: 352),
+            followUpRow.widthAnchor.constraint(equalToConstant: 352),
+            footerRow.widthAnchor.constraint(equalToConstant: 352),
         ])
     }
 
@@ -318,7 +338,14 @@ final class OverlayController: NSObject {
         let question = followUpField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else { return }
         conversation.append(.user(text: question))
+        currentQuestionText = question
         runQuery()
+    }
+
+    @objc private func copyQuestionTapped() {
+        guard let question = currentQuestionText else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(question, forType: .string)
     }
 
     @objc private func copyTapped() {

@@ -21,18 +21,21 @@ cp "Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 echo "Codesigning with local dev identity..."
 # This project lives in an iCloud-Drive-synced folder, and the file-provider daemon keeps
 # re-tagging files with com.apple.FinderInfo (and dropping ._* AppleDouble sidecars) even
-# seconds after they're cleared — codesign rejects both. Retry the whole clean+sign cycle
-# instead of a single attempt, since this is a transient race, not a real problem with the
-# bundle's contents (a plain `open` launches it fine even when the strict verify fails).
-for attempt in 1 2 3 4 5; do
+# seconds after they're cleared — codesign rejects both. Worse, iCloud can re-tag the bundle
+# again in the instant AFTER a signing attempt succeeds, silently invalidating that signature
+# (confirmed live: codesign exited 0, but launchd then refused to run it with
+# OS_REASON_CODESIGNING). So success is only real once --verify --deep --strict also passes —
+# checking codesign's own exit code alone isn't enough.
+for attempt in 1 2 3 4 5 6 7 8; do
     xattr -cr "${APP_BUNDLE}"
     find "${APP_BUNDLE}" -name "._*" -delete
     find "${APP_BUNDLE}" -name ".DS_Store" -delete
-    if codesign --force --deep --sign "PickAI Local Dev" "${APP_BUNDLE}" 2>/tmp/pickai_codesign_err.log; then
+    if codesign --force --deep --sign "PickAI Local Dev" "${APP_BUNDLE}" 2>/tmp/pickai_codesign_err.log \
+        && codesign --verify --deep --strict "${APP_BUNDLE}" 2>>/tmp/pickai_codesign_err.log; then
         break
     fi
-    if [ "$attempt" -eq 5 ]; then
-        echo "Codesigning failed after 5 attempts:"
+    if [ "$attempt" -eq 8 ]; then
+        echo "Codesigning failed after 8 attempts:"
         cat /tmp/pickai_codesign_err.log
         exit 1
     fi
