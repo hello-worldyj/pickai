@@ -10,6 +10,42 @@ export interface Env {
   B2_APPLICATION_KEY: string;
   B2_BUCKET: string;
   B2_ENDPOINT: string;
+  GITHUB_TOKEN: string;
+}
+
+const ISSUE_REPO = "hello-worldyj/pick_ai";
+
+// Files a GitHub issue for a genuine unexpected exception, so it gets picked up and fixed
+// without anyone having to notice and report it first. Deliberately narrow: expected error
+// paths (bad request, auth, OpenAI being down) return their own status codes above this and
+// never reach here — only real bugs in this code should file an issue. Can't catch a Worker
+// killed outright for exceeding its CPU/memory limits (execution halts before this runs).
+async function reportErrorToGitHub(env: Env, error: unknown, context: Record<string, unknown>): Promise<void> {
+  if (!env.GITHUB_TOKEN) return;
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+  try {
+    await fetch(`https://api.github.com/repos/${ISSUE_REPO}/issues`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+        "User-Agent": "pick-ai-backend",
+        Accept: "application/vnd.github+json",
+      },
+      body: JSON.stringify({
+        title: `[auto] Backend error: ${message.slice(0, 100)}`,
+        body:
+          `**Message:** ${message}\n\n` +
+          `**Context:** \`${JSON.stringify(context)}\`\n\n` +
+          `**Time:** ${new Date().toISOString()}\n\n` +
+          (stack ? `**Stack:**\n\`\`\`\n${stack}\n\`\`\`` : ""),
+        labels: ["auto-filed", "backend"],
+      }),
+    });
+  } catch (reportErr) {
+    console.error("failed to file GitHub issue:", reportErr);
+  }
 }
 
 type Mode = "answer" | "explain";
@@ -110,6 +146,17 @@ export default {
       );
     }
 
+    try {
+      return await handleQuery(body, env, ctx);
+    } catch (error) {
+      ctx.waitUntil(reportErrorToGitHub(env, error, { mode: body.mode, messageCount: body.messages.length }));
+      console.error("unexpected error:", error);
+      return new Response("Internal error", { status: 500 });
+    }
+  },
+};
+
+async function handleQuery(body: QueryRequest, env: Env, ctx: ExecutionContext): Promise<Response> {
     const openaiMessages = [
       { role: "system", content: SYSTEM_PROMPTS[body.mode] },
       ...body.messages.map((message) => ({ role: message.role, content: toChatContent(message) })),
@@ -167,5 +214,4 @@ export default {
     return new Response(JSON.stringify({ result }), {
       headers: { "Content-Type": "application/json" },
     });
-  },
-};
+}
