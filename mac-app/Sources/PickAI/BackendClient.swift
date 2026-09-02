@@ -45,9 +45,15 @@ enum BackendClient {
 
     private struct ResponseBody: Decodable {
         let result: String
+        let reasoning: String?
     }
 
-    static func query(messages: [ChatMessage], mode: QueryMode) async throws -> String {
+    struct QueryResult {
+        let result: String
+        let reasoning: String
+    }
+
+    static func query(messages: [ChatMessage], mode: QueryMode) async throws -> QueryResult {
         do {
             return try await attemptQuery(messages: messages, mode: mode)
         } catch let error {
@@ -70,7 +76,7 @@ enum BackendClient {
         }
     }
 
-    private static func attemptQuery(messages: [ChatMessage], mode: QueryMode) async throws -> String {
+    private static func attemptQuery(messages: [ChatMessage], mode: QueryMode) async throws -> QueryResult {
         var request = URLRequest(url: Config.backendURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -88,6 +94,6 @@ enum BackendClient {
             throw BackendError.decoding
         }
 
-        return decoded.result
+        return QueryResult(result: decoded.result, reasoning: decoded.reasoning ?? "")
     }
 }

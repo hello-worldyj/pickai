@@ -94,11 +94,18 @@ interface QueryRequest {
   messages: Message[];
 }
 
+// Split into two labeled sections so the backend can show the model's work (which materially
+// improves accuracy on arithmetic/multi-step problems vs. jumping straight to an answer) while
+// still giving the app a clean final answer to display and store. Plain text only, no LaTeX/markdown
+// in either section — that formatting was explicitly requested to not creep back in.
+const REASONING_MARKER = "FINAL ANSWER:";
+
 const SYSTEM_PROMPTS: Record<Mode, string> = {
   answer:
-    "Give ONLY the final answer, nothing else. No restating the question, no work shown, no steps, no preamble, no LaTeX or math notation (no \\( \\), \\[ \\], $, or similar) — plain text only. " +
-    'For a math or computation question, respond in exactly this format: "The answer is: <result>". For any other question, respond with just the answer itself in one short line. ' +
-    "If the user asks a follow-up question, keep answering in this same terse style.",
+    "Work through the problem step by step first, showing your reasoning in plain text (no LaTeX or math notation — no \\( \\), \\[ \\], $, or similar). " +
+    `Then, on a new line, write "${REASONING_MARKER}" followed by ONLY the final answer, nothing else — no restating the question, no units of work, no LaTeX. ` +
+    `For a math or computation question, that final line must be exactly "${REASONING_MARKER} The answer is: <result>". For any other question, that final line must be exactly "${REASONING_MARKER} <answer>" with the answer in one short line. ` +
+    "If the user asks a follow-up question, repeat this same two-part structure.",
   explain: "Give a clear, step-by-step explanation. Be thorough but concise. If the user asks a follow-up question, continue explaining in the same style.",
 };
 
@@ -139,6 +146,20 @@ export function base64ToBytes(base64: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+// "explain" mode's whole response is already the step-by-step content the user asked to see,
+// so it has no separate reasoning section. Only "answer" mode's response is split on the marker;
+// if the model didn't include it (rare, but not guaranteed), fall back to the full content as
+// the result with no reasoning shown rather than losing the answer.
+export function splitReasoningAndAnswer(content: string, mode: Mode): { reasoning: string; result: string } {
+  if (mode !== "answer") return { reasoning: "", result: content };
+  const markerIndex = content.indexOf(REASONING_MARKER);
+  if (markerIndex === -1) return { reasoning: "", result: content };
+  return {
+    reasoning: content.slice(0, markerIndex).trim(),
+    result: content.slice(markerIndex + REASONING_MARKER.length).trim(),
+  };
 }
 
 export function toChatContent(message: Message): ChatContent {
@@ -209,9 +230,10 @@ async function handleQuery(body: QueryRequest, env: Env, ctx: ExecutionContext):
         Authorization: `Bearer ${env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
+        // gpt-5.x models reject any non-default temperature via chat/completions (400 error),
+        // so this is intentionally omitted rather than set — don't add it back.
         model: env.OPENAI_MODEL || "gpt-4o-mini",
         messages: openaiMessages,
-        temperature: 0.3,
       }),
     });
 
@@ -224,7 +246,8 @@ async function handleQuery(body: QueryRequest, env: Env, ctx: ExecutionContext):
       choices: { message: { content: string } }[];
     }>();
 
-    const result = data.choices[0]?.message?.content?.trim() ?? "";
+    const content = data.choices[0]?.message?.content?.trim() ?? "";
+    const { reasoning, result } = splitReasoningAndAnswer(content, body.mode);
 
     // The most recent message is this turn's question — for the very first exchange
     // of a session that's the screenshot/text that kicked it off; for a follow-up it's
@@ -251,7 +274,7 @@ async function handleQuery(body: QueryRequest, env: Env, ctx: ExecutionContext):
       })()
     );
 
-    return new Response(JSON.stringify({ result }), {
+    return new Response(JSON.stringify({ result, reasoning }), {
       headers: { "Content-Type": "application/json" },
     });
 }

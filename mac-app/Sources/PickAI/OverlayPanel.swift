@@ -52,6 +52,9 @@ final class OverlayController: NSObject {
     private let answerButton = NSButton(title: "Answer", target: nil, action: nil)
     private let explainButton = NSButton(title: "Explain", target: nil, action: nil)
     private let spinner = NSProgressIndicator()
+    private let reasoningLabel = NSTextField(labelWithString: "Reasoning")
+    private let reasoningScrollView = NSScrollView()
+    private let reasoningTextView = NSTextView()
     private let resultScrollView = NSScrollView()
     private let resultTextView = NSTextView()
     private let followUpRow = NSStackView()
@@ -129,7 +132,7 @@ final class OverlayController: NSObject {
     private enum State {
         case choosing
         case loading
-        case result(String)
+        case result(reasoning: String, answer: String)
     }
 
     private func setState(_ state: State) {
@@ -139,6 +142,8 @@ final class OverlayController: NSObject {
             buttonsRow.isHidden = false
             spinner.isHidden = true
             spinner.stopAnimation(nil)
+            reasoningLabel.isHidden = true
+            reasoningScrollView.isHidden = true
             resultScrollView.isHidden = true
             followUpRow.isHidden = true
             footerRow.isHidden = true
@@ -147,20 +152,27 @@ final class OverlayController: NSObject {
             buttonsRow.isHidden = true
             spinner.isHidden = false
             spinner.startAnimation(nil)
+            reasoningLabel.isHidden = true
+            reasoningScrollView.isHidden = true
             resultScrollView.isHidden = true
             followUpRow.isHidden = true
             footerRow.isHidden = true
-        case .result(let text):
+        case .result(let reasoning, let answer):
             // Once the answer is in, the recapped question/screenshot preview is just
-            // clutter above it — this section should show the answer and nothing else.
+            // clutter above it — this section should show the reasoning (when the backend sent
+            // any — "explain" mode doesn't) and the answer and nothing else.
             previewLabel.isHidden = true
             buttonsRow.isHidden = true
             spinner.isHidden = true
             spinner.stopAnimation(nil)
+            let hasReasoning = !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            reasoningLabel.isHidden = !hasReasoning
+            reasoningScrollView.isHidden = !hasReasoning
+            reasoningTextView.string = reasoning
             resultScrollView.isHidden = false
             followUpRow.isHidden = false
             footerRow.isHidden = false
-            resultTextView.string = text
+            resultTextView.string = answer
             followUpField.stringValue = ""
             copyQuestionButton.isHidden = currentQuestionText == nil
         }
@@ -201,6 +213,23 @@ final class OverlayController: NSObject {
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isHidden = true
+
+        reasoningLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        reasoningLabel.textColor = .secondaryLabelColor
+
+        reasoningTextView.isEditable = false
+        reasoningTextView.isSelectable = true
+        reasoningTextView.font = .systemFont(ofSize: 12)
+        reasoningTextView.textColor = .secondaryLabelColor
+        reasoningTextView.textContainerInset = NSSize(width: 4, height: 4)
+        reasoningTextView.drawsBackground = false
+
+        reasoningScrollView.documentView = reasoningTextView
+        reasoningScrollView.hasVerticalScroller = true
+        reasoningScrollView.drawsBackground = false
+        reasoningScrollView.translatesAutoresizingMaskIntoConstraints = false
+        reasoningScrollView.heightAnchor.constraint(lessThanOrEqualToConstant: 140).isActive = true
+        reasoningScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
 
         resultTextView.isEditable = false
         resultTextView.isSelectable = true
@@ -256,6 +285,8 @@ final class OverlayController: NSObject {
         stack.addArrangedSubview(previewLabel)
         stack.addArrangedSubview(buttonsRow)
         stack.addArrangedSubview(spinner)
+        stack.addArrangedSubview(reasoningLabel)
+        stack.addArrangedSubview(reasoningScrollView)
         stack.addArrangedSubview(resultScrollView)
         stack.addArrangedSubview(followUpRow)
         stack.addArrangedSubview(footerRow)
@@ -269,6 +300,7 @@ final class OverlayController: NSObject {
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
             previewLabel.widthAnchor.constraint(equalToConstant: 352),
             buttonsRow.widthAnchor.constraint(equalToConstant: 352),
+            reasoningScrollView.widthAnchor.constraint(equalToConstant: 352),
             resultScrollView.widthAnchor.constraint(equalToConstant: 352),
             followUpRow.widthAnchor.constraint(equalToConstant: 352),
             footerRow.widthAnchor.constraint(equalToConstant: 352),
@@ -363,14 +395,16 @@ final class OverlayController: NSObject {
         let mode = activeMode
         Task {
             do {
-                let result = try await BackendClient.query(messages: messages, mode: mode)
-                conversation.append(.assistant(text: result))
-                setState(.result(result))
+                let response = try await BackendClient.query(messages: messages, mode: mode)
+                // Only the final answer goes back into the conversation — the reasoning is
+                // shown once in the popup, not replayed to the model on every follow-up turn.
+                conversation.append(.assistant(text: response.result))
+                setState(.result(reasoning: response.reasoning, answer: response.result))
                 // Persistence now happens server-side (backend Worker -> D1/B2) so the app
                 // doesn't need to know about it at all — see HistoryWindowController for how
                 // that history is browsed from within the app.
             } catch {
-                setState(.result("Error: \(error.localizedDescription)"))
+                setState(.result(reasoning: "", answer: "Error: \(error.localizedDescription)"))
             }
         }
     }

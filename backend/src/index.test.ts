@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, isMessage, isQueryRequest, toChatContent } from "./index";
+import { base64ToBytes, isMessage, isQueryRequest, splitReasoningAndAnswer, toChatContent } from "./index";
 
 describe("isMessage", () => {
   it("accepts a message with text", () => {
@@ -98,5 +98,25 @@ describe("toChatContent", () => {
   it("uses the default image instruction when no text is given", () => {
     const result = toChatContent({ role: "user", imageBase64: "aGk=" }) as { type: string; text?: string }[];
     expect(result[0].text).toMatch(/identify the question/i);
+  });
+});
+
+describe("splitReasoningAndAnswer", () => {
+  it("splits answer-mode content on the marker", () => {
+    const content = "Step 1: 500/25 = 20\nStep 2: double it = 40\nFINAL ANSWER: The answer is: 40";
+    expect(splitReasoningAndAnswer(content, "answer")).toEqual({
+      reasoning: "Step 1: 500/25 = 20\nStep 2: double it = 40",
+      result: "The answer is: 40",
+    });
+  });
+
+  it("falls back to the full content as the result if the marker is missing", () => {
+    const content = "The answer is: 40";
+    expect(splitReasoningAndAnswer(content, "answer")).toEqual({ reasoning: "", result: "The answer is: 40" });
+  });
+
+  it("never splits explain-mode content, even if it happens to contain the marker text", () => {
+    const content = "Step 1...\nFINAL ANSWER: 40\nStep 2...";
+    expect(splitReasoningAndAnswer(content, "explain")).toEqual({ reasoning: "", result: content });
   });
 });
