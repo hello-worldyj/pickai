@@ -101,17 +101,30 @@ final class OverlayController: NSObject {
     /// needed to diagnose it after the fact instead.
     private func logVisibility(trigger: String, at screenPoint: NSPoint) {
         let screen = NSScreen.screens.first(where: { $0.frame.contains(screenPoint) }) ?? NSScreen.main
-        NSLog(
-            "[PickAI] show(\(trigger)) at=\(screenPoint) panelFrame=\(panel.frame) isVisible=\(panel.isVisible) "
-                + "isKeyWindow=\(panel.isKeyWindow) screen=\(String(describing: screen?.frame)) "
-                + "frontmostAppFullScreen=\(Self.isFrontmostAppFullScreen())"
-        )
+        let panelFrame = panel.frame
+        let isVisible = panel.isVisible
+        let isKeyWindow = panel.isKeyWindow
+        let screenFrame = screen?.frame
+        // isFrontmostAppFullScreen() makes a synchronous cross-process Accessibility call, which
+        // can block for a long time if the frontmost app is slow to respond. This runs on the same
+        // main run loop as PickAI's globally head-inserted CGEventTaps (all system keydown events
+        // funnel through them first) — a stall here previously froze system-wide keyboard input
+        // until macOS's tap watchdog kicked in (confirmed via repeated "event tap disabled (timeout)"
+        // log lines during a real freeze). Dispatch off the main thread since this is diagnostic-only.
+        DispatchQueue.global(qos: .utility).async {
+            let frontmostAppFullScreen = Self.isFrontmostAppFullScreen()
+            NSLog(
+                "[PickAI] show(\(trigger)) at=\(screenPoint) panelFrame=\(panelFrame) isVisible=\(isVisible) "
+                    + "isKeyWindow=\(isKeyWindow) screen=\(String(describing: screenFrame)) "
+                    + "frontmostAppFullScreen=\(frontmostAppFullScreen)"
+            )
+        }
     }
 
     /// Queries the frontmost app's focused window via Accessibility rather than anything on
     /// Pick AI's own process — NSApp.presentationOptions only reflects Pick AI's own state,
     /// not whichever other app the user is actually looking at.
-    private static func isFrontmostAppFullScreen() -> Bool {
+    private nonisolated static func isFrontmostAppFullScreen() -> Bool {
         guard let frontApp = NSWorkspace.shared.frontmostApplication else { return false }
         let axApp = AXUIElementCreateApplication(frontApp.processIdentifier)
         var windowValue: CFTypeRef?

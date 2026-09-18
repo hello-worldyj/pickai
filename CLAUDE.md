@@ -11,6 +11,13 @@ a website and in the native Mac app.
 - `mac-app/` — Swift Package Manager menu-bar app (no Xcode project). Build with
   `mac-app/scripts/build_app.sh`, which has a hardened retry loop for an iCloud-Drive xattr race
   that can silently invalidate a code signature after signing succeeds — don't simplify that away.
+  The `com.pickai.app` LaunchAgent (`KeepAlive=true`) runs its binary from
+  `~/Library/Application Support/PickAI/PickAI.app`, NOT from this iCloud-synced folder — the
+  build script deploys there as its last step. Don't point the LaunchAgent back at the
+  `mac-app/PickAI.app` path: iCloud can re-tag that copy with `com.apple.FinderInfo` moments after
+  a successful sign, invalidating the signature; launchd then SIGKILLs every relaunch attempt for
+  a code-signing launch-constraint violation, in a tight crash loop severe enough to have frozen
+  the whole machine once (2026-09-09).
 
 ## Deploys
 

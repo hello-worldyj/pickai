@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // background — this is why the hotkeys would stop responding after a while.
         ProcessInfo.processInfo.disableAutomaticTermination("PickAI is a background menu bar agent")
 
+        installLaunchAgentIfNeeded()
         setupStatusItem()
         checkAccessibilityPermission()
         ScreenshotCapture.requestPermissionIfNeeded()
@@ -117,6 +118,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         item.menu = menu
         statusItem = item
+    }
+
+    /// Self-installs the com.pickai.app LaunchAgent (KeepAlive + a 1s relaunch throttle)
+    /// so PickAI reopens almost instantly whenever it's quit or crashes — including on a
+    /// friend's Mac after an AirDrop, which has no idea this LaunchAgent is supposed to
+    /// exist. Points at wherever THIS running copy actually lives (Bundle.main.bundlePath),
+    /// so it's correct whether that's the dev deploy path or wherever someone dragged the
+    /// app after unzipping it. Idempotent: only touches launchd if the plist is missing or
+    /// stale, since unload+load kills the currently-running process (KeepAlive relaunches
+    /// it within ~1s, but there's no reason to do that on every ordinary launch).
+    private func installLaunchAgentIfNeeded() {
+        let label = "com.pickai.app"
+        let binaryPath = Bundle.main.bundlePath + "/Contents/MacOS/PickAI"
+        let launchAgentsDir = NSHomeDirectory() + "/Library/LaunchAgents"
+        let plistPath = launchAgentsDir + "/\(label).plist"
+        let logPath = NSHomeDirectory() + "/Library/Logs/pickai-app.log"
+
+        let desiredPlist: [String: Any] = [
+            "Label": label,
+            "ProgramArguments": [binaryPath],
+            "RunAtLoad": true,
+            "KeepAlive": true,
+            "ThrottleInterval": 1,
+            "ProcessType": "Interactive",
+            "StandardOutPath": logPath,
+            "StandardErrorPath": logPath,
+        ]
+
+        let fm = FileManager.default
+        let existing = fm.contents(atPath: plistPath).flatMap {
+            try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any]
+        }
+        if let existing, NSDictionary(dictionary: existing) == NSDictionary(dictionary: desiredPlist) {
+            return
+        }
+
+        do {
+            try fm.createDirectory(atPath: launchAgentsDir, withIntermediateDirectories: true)
+            let data = try PropertyListSerialization.data(fromPropertyList: desiredPlist, format: .xml, options: 0)
+            if fm.fileExists(atPath: plistPath) {
+                let unload = Process()
+                unload.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+                unload.arguments = ["unload", plistPath]
+                try? unload.run()
+                unload.waitUntilExit()
+            }
+            try data.write(to: URL(fileURLWithPath: plistPath))
+
+            let load = Process()
+            load.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            load.arguments = ["load", plistPath]
+            try load.run()
+            NSLog("[PickAI] Installed/updated LaunchAgent at \(plistPath)")
+        } catch {
+            NSLog("[PickAI] Failed to install LaunchAgent: \(error)")
+        }
     }
 
     private func checkAccessibilityPermission() {

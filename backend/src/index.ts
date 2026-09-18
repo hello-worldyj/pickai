@@ -233,6 +233,9 @@ async function handleQuery(body: QueryRequest, env: Env, ctx: ExecutionContext):
         // gpt-5.x models reject any non-default temperature via chat/completions (400 error),
         // so this is intentionally omitted rather than set — don't add it back.
         model: env.OPENAI_MODEL || "gpt-4o-mini",
+        // "medium" is Terra's default reasoning effort — set explicitly rather than omitted
+        // so it's not silently affected by a future provider default change.
+        reasoning_effort: "medium",
         messages: openaiMessages,
       }),
     });

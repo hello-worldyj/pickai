@@ -43,4 +43,24 @@ for attempt in 1 2 3 4 5 6 7 8; do
 done
 
 echo "Done: ${APP_BUNDLE}"
-echo "Run with: open ${APP_BUNDLE}"
+
+# The LaunchAgent (com.pickai.app, KeepAlive=true) runs its OWN copy from here, not from
+# the iCloud-synced folder above. iCloud's file-provider daemon can re-tag the bundle with
+# com.apple.FinderInfo within ~1s of a successful sign — invalidating the signature after
+# this script already verified it passed — which caused a real incident: launchd kept
+# relaunching the invalidated binary, got SIGKILLed by the kernel's code-signing launch
+# constraint every time, in a tight loop (2026-09-09). Deploying outside iCloud sync removes
+# the race entirely instead of trying to out-run it with more retries.
+DEPLOY_DIR="$HOME/Library/Application Support/PickAI"
+DEPLOY_BUNDLE="${DEPLOY_DIR}/${APP_BUNDLE}"
+echo "Deploying to ${DEPLOY_BUNDLE} (outside iCloud sync, what launchd actually runs)..."
+mkdir -p "${DEPLOY_DIR}"
+rm -rf "${DEPLOY_BUNDLE}"
+cp -R "${APP_BUNDLE}" "${DEPLOY_BUNDLE}"
+xattr -cr "${DEPLOY_BUNDLE}"
+xattr -d com.apple.FinderInfo "${DEPLOY_BUNDLE}" 2>/dev/null || true
+codesign --force --deep --sign "PickAI Local Dev" "${DEPLOY_BUNDLE}"
+codesign --verify --deep --strict "${DEPLOY_BUNDLE}"
+
+echo "Done: ${DEPLOY_BUNDLE}"
+echo "Restart with: launchctl kickstart -k gui/\$(id -u)/com.pickai.app"
