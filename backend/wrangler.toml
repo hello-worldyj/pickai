@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
 [vars]
-OPENAI_MODEL = "gpt-5.6-terra"
+OPENAI_MODEL = "gpt-6-luna"
 B2_BUCKET = "pickai"
 B2_ENDPOINT = "s3.eu-central-003.backblazeb2.com"
 
