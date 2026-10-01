@@ -5,6 +5,10 @@ export interface Env {
   OPENAI_API_KEY: string;
   SHARED_SECRET: string;
   OPENAI_MODEL: string;
+  // "low" | "medium" | "high" — a real OpenAI API parameter for reasoning models, separate from
+  // the model name itself. Optional and omitted entirely when unset, since not every model
+  // supports it and sending it to one that doesn't would 400 the whole request.
+  OPENAI_REASONING_EFFORT?: string;
   HISTORY_DB: D1Database;
   B2_KEY_ID: string;
   B2_APPLICATION_KEY: string;
@@ -233,9 +237,10 @@ async function handleQuery(body: QueryRequest, env: Env, ctx: ExecutionContext):
         // gpt-5.x models reject any non-default temperature via chat/completions (400 error),
         // so this is intentionally omitted rather than set — don't add it back.
         model: env.OPENAI_MODEL || "gpt-4o-mini",
-        // "medium" is Terra's default reasoning effort — set explicitly rather than omitted
-        // so it's not silently affected by a future provider default change.
-        reasoning_effort: "medium",
+        // Set explicitly rather than omitted so it's not silently affected by a future
+        // provider default change. Configurable via env rather than hardcoded so different
+        // models/effort levels can be A/B tested without a code change each time.
+        reasoning_effort: env.OPENAI_REASONING_EFFORT || "medium",
         messages: openaiMessages,
       }),
     });
