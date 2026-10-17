@@ -108,7 +108,9 @@ const SYSTEM_PROMPTS: Record<Mode, string> = {
   answer:
     "Work through the problem step by step first, showing your reasoning in plain text (no LaTeX or math notation — no \\( \\), \\[ \\], $, or similar). " +
     `Then, on a new line, write "${REASONING_MARKER}" followed by ONLY the final answer, nothing else — no restating the question, no units of work, no LaTeX. ` +
-    `For a math or computation question, that final line must be exactly "${REASONING_MARKER} The answer is: <result>". For any other question, that final line must be exactly "${REASONING_MARKER} <answer>" with the answer in one short line. ` +
+    `For a math or computation question, that final line must be exactly "${REASONING_MARKER} The answer is: <result>". ` +
+    `For a multiple-choice question that presents lettered options (A, B, C, D, E, ...), that final line must be exactly "${REASONING_MARKER} <letter>" — ONLY the single capital option letter and nothing else at all: not the option's text, not "The answer is", not punctuation. This is strict and must never be skipped for a lettered multiple-choice question, even if the correct option's text would otherwise be natural to restate. ` +
+    `For any other question, that final line must be exactly "${REASONING_MARKER} <answer>" with the answer in one short line. ` +
     "If the user asks a follow-up question, repeat this same two-part structure.",
   explain: "Give a clear, step-by-step explanation. Be thorough but concise. If the user asks a follow-up question, continue explaining in the same style.",
 };
