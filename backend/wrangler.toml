@@ -1,0 +1,17 @@
+name = "pick-ai-backend"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[vars]
+OPENAI_MODEL = "gpt-6-luna"
+OPENAI_REASONING_EFFORT = "low"
+B2_BUCKET = "pickai"
+B2_ENDPOINT = "s3.eu-central-003.backblazeb2.com"
+
+[[d1_databases]]
+binding = "HISTORY_DB"
+database_name = "pickai-history"
+database_id = "f3fc87d5-5410-4b91-99e6-6c888580474b"
+
+[version_metadata]
+binding = "CF_VERSION_METADATA"

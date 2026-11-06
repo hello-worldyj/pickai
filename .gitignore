@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+.DS_Store
+mac-app/.build/
+mac-app/PickAI.app/
+mac-app/PickAI.app.zip
+.worktrees/
