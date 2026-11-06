@@ -13,12 +13,12 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        // Excludes this window from screenshots, screen recordings, and screen shares
-        // (e.g. Cmd+Shift+4, QuickTime, Zoom/Meet screen share) — it's still visible on-screen.
-        // The real cause of the earlier "doesn't show up" reports was diagnosed on 2026-08-23 as
-        // a collectionBehavior/Space-exclusion bug (see below), not this flag — sharingType was
-        // disabled and re-enabled several times chasing the wrong cause before that.
-        sharingType = .none
+        // sharingType = .none excludes this window from screenshots/screen recordings (Cmd+Shift+4,
+        // QuickTime, Zoom/Meet share, etc.) so Pick AI doesn't capture itself. User-toggleable via
+        // the menu bar "Hide Popup From Screenshots" item (see AppDelegate/PickAISettings) — applied
+        // fresh on every show() too, so a toggle from any Pick AI process (main or a clone) takes
+        // effect immediately rather than only on next launch.
+        sharingType = PickAISettings.hideFromScreenshots ? .none : .readOnly
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         // .canJoinAllSpaces + .fullScreenAuxiliary is the combination Apple's docs suggest for
@@ -48,10 +48,8 @@ final class OverlayController: NSObject {
 
     private let stack = NSStackView()
     private let previewLabel = NSTextField(wrappingLabelWithString: "")
-    private let buttonsRow = NSStackView()
-    private let answerButton = NSButton(title: "Answer", target: nil, action: nil)
-    private let explainButton = NSButton(title: "Explain", target: nil, action: nil)
     private let spinner = NSProgressIndicator()
+    private var fullWidthConstraints: [NSLayoutConstraint] = []
     private let reasoningLabel = NSTextField(labelWithString: "Reasoning")
     private let reasoningScrollView = NSScrollView()
     private let reasoningTextView = NSTextView()
@@ -71,27 +69,35 @@ final class OverlayController: NSObject {
     }
 
     func show(text: String, at screenPoint: NSPoint) {
+        applyScreenshotVisibilitySetting()
         conversation = [.user(text: text)]
         currentQuestionText = text
         previewLabel.stringValue = String(text.prefix(140))
-        setState(.choosing)
+        // No more "Answer or Explain?" choosing step — that whole row only existed to pick a
+        // mode, and with Explain gone there's nothing left to choose, so go straight to loading.
+        activeMode = .answer
+        setState(.loading)
         position(at: screenPoint)
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         installDismissMonitors()
         logVisibility(trigger: "text", at: screenPoint)
+        runQuery()
     }
 
     func show(imagePNGData: Data, at screenPoint: NSPoint) {
+        applyScreenshotVisibilitySetting()
         conversation = [.user(imagePNGData: imagePNGData)]
         currentQuestionText = nil
         previewLabel.stringValue = "📷 Screenshot captured"
-        setState(.choosing)
+        activeMode = .answer
+        setState(.loading)
         position(at: screenPoint)
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         installDismissMonitors()
         logVisibility(trigger: "screenshot", at: screenPoint)
+        runQuery()
     }
 
     /// The popup has been reported as sometimes not appearing with no other symptom — likely
@@ -137,32 +143,31 @@ final class OverlayController: NSObject {
         return (fullScreenValue as? Bool) ?? false
     }
 
+    private func applyScreenshotVisibilitySetting() {
+        panel.sharingType = PickAISettings.hideFromScreenshots ? .none : .readOnly
+    }
+
     func dismiss() {
         panel.orderOut(nil)
         removeDismissMonitors()
     }
 
     private enum State {
-        case choosing
         case loading
         case result(reasoning: String, answer: String)
     }
 
+    // The fittingSize-based auto-shrink approach never produced a small loading panel in
+    // practice (NSStackView/Auto Layout fittingSize didn't collapse reliably even with hidden
+    // siblings and a lessThanOrEqualTo trailing constraint). Loading now gets an explicit,
+    // hardcoded small size instead of asking Auto Layout to infer one.
+    private static let loadingSize = NSSize(width: 44, height: 44)
+    private var currentContentSize = NSSize(width: 320, height: 100)
+
     private func setState(_ state: State) {
         switch state {
-        case .choosing:
-            previewLabel.isHidden = false
-            buttonsRow.isHidden = false
-            spinner.isHidden = true
-            spinner.stopAnimation(nil)
-            reasoningLabel.isHidden = true
-            reasoningScrollView.isHidden = true
-            resultScrollView.isHidden = true
-            followUpRow.isHidden = true
-            footerRow.isHidden = true
         case .loading:
-            previewLabel.isHidden = false
-            buttonsRow.isHidden = true
+            previewLabel.isHidden = true
             spinner.isHidden = false
             spinner.startAnimation(nil)
             reasoningLabel.isHidden = true
@@ -170,12 +175,14 @@ final class OverlayController: NSObject {
             resultScrollView.isHidden = true
             followUpRow.isHidden = true
             footerRow.isHidden = true
+            NSLayoutConstraint.deactivate(fullWidthConstraints)
+            currentContentSize = Self.loadingSize
         case .result(let reasoning, let answer):
+            NSLayoutConstraint.activate(fullWidthConstraints)
             // Once the answer is in, the recapped question/screenshot preview is just
             // clutter above it — this section should show the reasoning (when the backend sent
-            // any — "explain" mode doesn't) and the answer and nothing else.
+            // any) and the answer and nothing else.
             previewLabel.isHidden = true
-            buttonsRow.isHidden = true
             spinner.isHidden = true
             spinner.stopAnimation(nil)
             let hasReasoning = !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -188,8 +195,9 @@ final class OverlayController: NSObject {
             resultTextView.string = answer
             followUpField.stringValue = ""
             copyQuestionButton.isHidden = currentQuestionText == nil
+            panel.layoutIfNeeded()
+            currentContentSize = panel.contentView?.fittingSize ?? NSSize(width: 320, height: 100)
         }
-        panel.layoutIfNeeded()
         resizeToFitContent()
     }
 
@@ -207,21 +215,6 @@ final class OverlayController: NSObject {
         previewLabel.textColor = .secondaryLabelColor
         previewLabel.lineBreakMode = .byTruncatingTail
         previewLabel.maximumNumberOfLines = 2
-
-        answerButton.target = self
-        answerButton.action = #selector(answerTapped)
-        answerButton.bezelStyle = .rounded
-        answerButton.keyEquivalent = "\r"
-
-        explainButton.target = self
-        explainButton.action = #selector(explainTapped)
-        explainButton.bezelStyle = .rounded
-
-        buttonsRow.orientation = .horizontal
-        buttonsRow.distribution = .fillEqually
-        buttonsRow.spacing = 8
-        buttonsRow.addArrangedSubview(answerButton)
-        buttonsRow.addArrangedSubview(explainButton)
 
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -296,7 +289,6 @@ final class OverlayController: NSObject {
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(previewLabel)
-        stack.addArrangedSubview(buttonsRow)
         stack.addArrangedSubview(spinner)
         stack.addArrangedSubview(reasoningLabel)
         stack.addArrangedSubview(reasoningScrollView)
@@ -306,31 +298,33 @@ final class OverlayController: NSObject {
 
         container.addSubview(stack)
 
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+        fullWidthConstraints = [
             previewLabel.widthAnchor.constraint(equalToConstant: 352),
-            buttonsRow.widthAnchor.constraint(equalToConstant: 352),
             reasoningScrollView.widthAnchor.constraint(equalToConstant: 352),
             resultScrollView.widthAnchor.constraint(equalToConstant: 352),
             followUpRow.widthAnchor.constraint(equalToConstant: 352),
             footerRow.widthAnchor.constraint(equalToConstant: 352),
+        ]
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+            // lessThanOrEqualTo (not equalTo) so the container shrinks to the spinner in loading
+            // state when fullWidthConstraints are inactive, rather than stretching to fill the panel.
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -14),
         ])
     }
 
     private func resizeToFitContent() {
-        let fitting = panel.contentView?.fittingSize ?? NSSize(width: 320, height: 100)
         var frame = panel.frame
-        frame.origin.y += frame.size.height - fitting.height
-        frame.size = fitting
+        frame.origin.y += frame.size.height - currentContentSize.height
+        frame.size = currentContentSize
         panel.setFrame(frame, display: true)
     }
 
     private func position(at screenPoint: NSPoint) {
-        let fitting = panel.contentView?.fittingSize ?? NSSize(width: 320, height: 100)
-        var origin = NSPoint(x: screenPoint.x + 12, y: screenPoint.y - fitting.height - 12)
+        let size = currentContentSize
+        var origin = NSPoint(x: screenPoint.x + 12, y: screenPoint.y - size.height - 12)
 
         // NSScreen.main requires a key window to resolve and can be nil while this panel isn't
         // key yet (e.g. right before its first makeKeyAndOrderFront), so fall through to any
@@ -341,11 +335,11 @@ final class OverlayController: NSObject {
 
         if let screen {
             let visible = screen.visibleFrame
-            origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - fitting.width - 8)
-            origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - fitting.height - 8)
+            origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
+            origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - size.height - 8)
         }
 
-        panel.setFrame(NSRect(origin: origin, size: fitting), display: true)
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
 
     private func installDismissMonitors() {
@@ -367,16 +361,6 @@ final class OverlayController: NSObject {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         clickMonitor = nil
         keyMonitor = nil
-    }
-
-    @objc private func answerTapped() {
-        activeMode = .answer
-        runQuery()
-    }
-
-    @objc private func explainTapped() {
-        activeMode = .explain
-        runQuery()
     }
 
     @objc private func askTapped() {
@@ -412,6 +396,14 @@ final class OverlayController: NSObject {
                 // Only the final answer goes back into the conversation — the reasoning is
                 // shown once in the popup, not replayed to the model on every follow-up turn.
                 conversation.append(.assistant(text: response.result))
+                let isMC = CapsLockBlinker.isMultipleChoiceAnswer(response.result)
+                NSLog("[PickAI] MC detection: isMC=\(isMC) result='\(response.result.prefix(80))'")
+                if isMC {
+                    // Silent mode: dismiss the overlay and signal the answer via Caps Lock LED blinks.
+                    dismiss()
+                    CapsLockBlinker.scheduleForAnswer(response.result)
+                    return
+                }
                 setState(.result(reasoning: response.reasoning, answer: response.result))
                 // Persistence now happens server-side (backend Worker -> D1/B2) so the app
                 // doesn't need to know about it at all — see HistoryWindowController for how

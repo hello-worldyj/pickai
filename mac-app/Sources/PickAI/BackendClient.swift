@@ -77,7 +77,10 @@ enum BackendClient {
     }
 
     private static func attemptQuery(messages: [ChatMessage], mode: QueryMode) async throws -> QueryResult {
-        var request = URLRequest(url: Config.backendURL)
+        // GPT-6 reasoning models (gpt-6-luna etc.) can take 90+ seconds. The URLSession
+        // default of 60s is too short — increase to 120s to avoid spurious timeouts that
+        // then retry and double the wait before showing an error.
+        var request = URLRequest(url: Config.backendURL, timeoutInterval: 120)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Config.sharedSecret, forHTTPHeaderField: "X-Pick-Key")

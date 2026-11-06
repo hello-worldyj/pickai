@@ -32,6 +32,7 @@ const loginEmailInput = document.getElementById("loginEmail");
 const loginPasswordInput = document.getElementById("loginPassword");
 const loginSignInBtn = document.getElementById("loginSignIn");
 const loginSignUpBtn = document.getElementById("loginSignUp");
+const termsConsent = document.getElementById("termsConsent");
 const loginError = document.getElementById("loginError");
 const appContent = document.getElementById("appContent");
 const accountEmail = document.getElementById("accountEmail");
@@ -118,6 +119,10 @@ function showLoginError(message) {
 
 googleSignInBtn.addEventListener("click", async () => {
   loginError.hidden = true;
+  if (!termsConsent.checked) {
+    showLoginError("Confirm that you are at least 13 and agree to the Terms and Privacy Notice before continuing.");
+    return;
+  }
   try {
     const result = await signInWithPopup(auth, new GoogleAuthProvider());
     // Google accounts have no password by default — prompt once, right after the first
@@ -166,6 +171,10 @@ loginSignInBtn.addEventListener("click", async () => {
 
 loginSignUpBtn.addEventListener("click", async () => {
   loginError.hidden = true;
+  if (!termsConsent.checked) {
+    showLoginError("Confirm that you are at least 13 and agree to the Terms and Privacy Notice before creating an account.");
+    return;
+  }
   try {
     await createUserWithEmailAndPassword(auth, loginEmailInput.value.trim(), loginPasswordInput.value);
   } catch (err) {
